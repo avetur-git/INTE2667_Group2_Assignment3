@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Home - E-Voting Platform{% endblock %}
+{% block content %}
+<div class="row justify-content-center text-center mb-4">
+    <div class="col-lg-8">
+        <h1 class="display-5">Electronic Voting Platform</h1>
+        <p class="lead">Base build for federal elections: enrolment, House of Representatives and Senate voting, counting and results. Security solutions are added on top of this base.</p>
+        <div class="d-flex gap-2 justify-content-center" id="home-actions">
+            <a class="btn btn-success btn-lg" href="/register">Create voter account</a>
+            <a class="btn btn-outline-success btn-lg" href="/login">Login</a>
+        </div>
+    </div>
+</div>
+<div class="row g-3">
+    <div class="col-md-4"><div class="card h-100"><div class="card-body"><h5>Voters</h5><p class="text-muted mb-0">Create an account, enrol (or check your status), update your address, then vote online, at a polling station terminal, or at a diplomatic mission if overseas.</p></div></div></div>
+    <div class="col-md-4"><div class="card h-100"><div class="card-body"><h5>Staff</h5><p class="text-muted mb-0">AEC officers register citizens. Commissioner's delegates enter candidates and handle court-ordered exclusions. Election admins run the election, terminals and the count.</p></div></div></div>
+    <div class="col-md-4"><div class="card h-100"><div class="card-body"><h5>Results</h5><p class="text-muted mb-0">House seats are counted with preferential voting. Senate seats use a quota with surplus transfers. Results can be exported for external systems.</p></div></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    if (authToken) document.getElementById('home-actions').innerHTML =
+        currentRole === 'voter' ? '<a class="btn btn-success btn-lg" href="/vote">Go to voting</a>' : '<a class="btn btn-success btn-lg" href="/staff">Go to staff portal</a>';
+});
+</script>
+{% endblock %}

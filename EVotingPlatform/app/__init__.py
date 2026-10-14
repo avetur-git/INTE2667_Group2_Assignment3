@@ -1,0 +1,68 @@
+from datetime import timedelta
+import os
+
+from dotenv import load_dotenv
+from flask import Flask, jsonify
+from flask_cors import CORS
+from flask_jwt_extended import JWTManager
+from flask_sqlalchemy import SQLAlchemy
+
+# Load environment variables
+load_dotenv()
+
+# Initialize extensions
+db = SQLAlchemy()
+jwt = JWTManager()
+
+
+def create_app(test_config=None):
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    app = Flask(__name__,
+                template_folder=os.path.join(project_root, 'templates'),
+                static_folder=os.path.join(project_root, 'static'))
+
+    # Configuration (development defaults - see .env.example)
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-me-0123456789abcdef')
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///evoting.db')
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-key-change-me-0123456789abcdef')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=int(os.environ.get('JWT_EXPIRES_HOURS', 8)))
+    app.config['BCRYPT_ROUNDS'] = int(os.environ.get('BCRYPT_ROUNDS', 12))
+    if test_config:
+        app.config.update(test_config)
+
+    # Initialize extensions with app
+    db.init_app(app)
+    jwt.init_app(app)
+    CORS(app)
+
+    # Models and security hooks (base behaviour; see app/security/hooks.py)
+    from app import models  # noqa: F401
+    from app.security import register_default_hooks
+    register_default_hooks()
+
+    # Register blueprints
+    from app.routes import (main_bp, auth_bp, voters_bp, elections_bp, candidates_bp,
+                            voting_bp, terminals_bp, results_bp, admin_bp)
+    app.register_blueprint(main_bp)
+    app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(voters_bp, url_prefix='/api/voters')
+    app.register_blueprint(elections_bp, url_prefix='/api/elections')
+    app.register_blueprint(candidates_bp, url_prefix='/api/candidates')
+    app.register_blueprint(voting_bp, url_prefix='/api/voting')
+    app.register_blueprint(terminals_bp, url_prefix='/api/terminals')
+    app.register_blueprint(results_bp, url_prefix='/api/results')
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return jsonify({'error': 'Not found'}), 404
+
+    # Create database tables
+    with app.app_context():
+        db.create_all()
+
+    from app.cli import register_cli
+    register_cli(app)
+
+    return app

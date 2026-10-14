@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Login - E-Voting Platform{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card">
+            <div class="card-header text-center"><h4>🗳️ Login</h4></div>
+            <div class="card-body">
+                <form id="loginForm">
+                    <div class="mb-3"><label class="form-label" for="username">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required></div>
+                    <div class="mb-3"><label class="form-label" for="password">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required></div>
+                    <div class="d-grid"><button type="submit" class="btn btn-success" id="loginBtn">Login</button></div>
+                </form>
+            </div>
+            <div class="card-footer text-center"><small class="text-muted">No account? <a href="/register">Create one</a></small></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn'); btn.disabled = true;
+    try {
+        const f = new FormData(e.target);
+        const result = await apiRequest('/auth/login', { method: 'POST',
+            body: JSON.stringify({ username: f.get('username'), password: f.get('password') }) });
+        saveLogin(result);
+        window.location.href = result.user.role === 'voter' ? '/dashboard' : '/staff';
+    } catch (err) { showAlert(err.message, 'danger'); }
+    finally { btn.disabled = false; }
+});
+</script>
+{% endblock %}

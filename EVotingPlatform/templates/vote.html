@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Vote - E-Voting Platform{% endblock %}
+{% block content %}
+<h2>Cast your vote</h2>
+
+<div class="card mb-4" id="setup-card">
+    <div class="card-body row g-3 align-items-end">
+        <div class="col-md-4"><label class="form-label">Election</label><select class="form-select" id="electionSelect"></select></div>
+        <div class="col-md-3"><label class="form-label">How are you voting?</label>
+            <select class="form-select" id="channelSelect">
+                <option value="online">Online (from home)</option>
+                <option value="polling_station">Polling station terminal</option>
+                <option value="diplomatic_mission">Diplomatic mission (overseas)</option>
+            </select></div>
+        <div class="col-md-3" id="terminalBox" style="display:none"><label class="form-label">Terminal ID</label>
+            <input class="form-control" id="terminalId" placeholder="e.g. PS-0001"></div>
+        <div class="col-md-2"><button class="btn btn-success w-100" id="loadBtn">Get my ballot papers</button></div>
+    </div>
+</div>
+
+<div id="ballot-area" style="display:none">
+    <div class="alert alert-info" id="ballot-intro"></div>
+
+    <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">House of Representatives - <span id="divisionName"></span></h5></div>
+        <div class="card-body">
+            <p class="text-muted">Number every box in order of preference: 1 for your first choice, and so on.</p>
+            <table class="table align-middle" id="houseTable"><tbody></tbody></table>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">Senate - <span id="stateName"></span></h5></div>
+        <div class="card-body">
+            <p class="text-muted" id="senateRules"></p>
+            <h6>Above the line (parties and groups)</h6>
+            <table class="table align-middle" id="atlTable"><tbody></tbody></table>
+            <h6 class="mt-4">Below the line (individual candidates)</h6>
+            <div id="btlArea"></div>
+        </div>
+    </div>
+
+    <button class="btn btn-success btn-lg" id="submitBtn">Submit my ballot</button>
+</div>
+
+<div class="card border-success" id="receipt-card" style="display:none">
+    <div class="card-body text-center">
+        <h4>✅ Your ballot has been recorded</h4>
+        <p class="mb-1">Receipt code (it does not show who you are or how you voted):</p>
+        <h3><code id="receiptCode"></code></h3>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let paper = null, me = null;
+
+async function init() {
+    if (!requireLogin()) return;
+    me = await apiRequest('/auth/profile');
+    if (!me.voter || me.voter.enrolment_status !== 'enrolled') {
+        showAlert('You must be enrolled before you can vote.', 'warning');
+        document.getElementById('setup-card').style.display = 'none';
+        return;
+    }
+    const elections = (await apiRequest('/elections/?status=open')).elections;
+    const sel = document.getElementById('electionSelect');
+    sel.innerHTML = elections.map(e => `<option value="${e.id}">${esc(e.name)} (${esc(e.election_date)})</option>`).join('');
+    if (!elections.length) { showAlert('There is no open election right now.', 'info'); document.getElementById('loadBtn').disabled = true; }
+    const ch = document.getElementById('channelSelect');
+    if (me.voter.is_overseas) { ch.value = 'diplomatic_mission'; }
+    onChannel();
+}
+
+function onChannel() {
+    const v = document.getElementById('channelSelect').value;
+    document.getElementById('terminalBox').style.display = v === 'online' ? 'none' : '';
+}
+document.getElementById('channelSelect').addEventListener('change', onChannel);
+
+document.getElementById('loadBtn').addEventListener('click', async () => {
+    try {
+        const id = document.getElementById('electionSelect').value;
+        paper = await apiRequest(`/voting/ballot-paper?election_id=${id}`);
+        renderPaper();
+    } catch (err) { showAlert(err.message, 'danger'); }
+});
+
+function renderPaper() {
+    document.getElementById('ballot-area').style.display = '';
+    document.getElementById('ballot-intro').textContent = paper.election.name;
+    document.getElementById('divisionName').textContent = 'Division of ' + (paper.division ? paper.division.name : '');
+    document.getElementById('stateName').textContent = paper.state;
+    document.querySelector('#houseTable tbody').innerHTML = paper.house_candidates.map(c =>
+        `<tr><td style="width:90px"><input type="number" min="1" class="form-control pref-input house-pref" data-id="${c.id}"></td>
+         <td><strong>${esc(c.name)}</strong><div class="text-muted small">${esc(c.party || 'Independent')}</div></td></tr>`).join('');
+    document.getElementById('senateRules').textContent =
+        `Either number at least ${paper.rules.senate_atl_min} boxes above the line, or at least ${paper.rules.senate_btl_min} candidates below the line (or both - below the line is used if it is complete).`;
+    document.querySelector('#atlTable tbody').innerHTML = paper.senate_groups.map(g =>
+        `<tr><td style="width:90px"><input type="number" min="1" class="form-control pref-input atl-pref" data-group="${esc(g.group_code)}"></td>
+         <td><strong>Group ${esc(g.group_code)}</strong> - ${esc(g.party || '')}</td></tr>`).join('');
+    const btl = paper.senate_groups.map(g => `<div class="mb-3"><div class="fw-bold">Group ${esc(g.group_code)} - ${esc(g.party || '')}</div>` +
+        g.candidates.map(c => btlRow(c)).join('') + '</div>');
+    if (paper.senate_ungrouped.length)
+        btl.push('<div class="mb-3"><div class="fw-bold">Ungrouped</div>' + paper.senate_ungrouped.map(c => btlRow(c)).join('') + '</div>');
+    document.getElementById('btlArea').innerHTML = btl.join('');
+}
+function btlRow(c) {
+    return `<div class="d-flex align-items-center mb-1"><input type="number" min="1" class="form-control pref-input btl-pref me-3" data-id="${c.id}"><span>${esc(c.name)}</span></div>`;
+}
+
+function collect(selector, key) {
+    const out = {};
+    document.querySelectorAll(selector).forEach(i => { if (i.value) out[i.dataset[key]] = parseInt(i.value, 10); });
+    return out;
+}
+
+document.getElementById('submitBtn').addEventListener('click', async () => {
+    const houseNums = collect('.house-pref', 'id');
+    const ids = Object.keys(houseNums);
+    const nums = Object.values(houseNums);
+    if (ids.length !== paper.house_candidates.length || new Set(nums).size !== nums.length) {
+        showAlert('Number every House of Representatives box once, with no repeats.', 'warning'); return;
+    }
+    const house_preferences = ids.sort((a, b) => houseNums[a] - houseNums[b]).map(Number);
+    const channel = document.getElementById('channelSelect').value;
+    const payload = {
+        election_id: paper.election.id, channel,
+        terminal_id: channel === 'online' ? null : document.getElementById('terminalId').value.trim(),
+        house_preferences, senate_atl: collect('.atl-pref', 'group'), senate_btl: collect('.btl-pref', 'id')
+    };
+    if (!confirm('Submit your ballot? You cannot change it afterwards.')) return;
+    try {
+        const r = await apiRequest('/voting/cast', { method: 'POST', body: JSON.stringify(payload) });
+        document.getElementById('ballot-area').style.display = 'none';
+        document.getElementById('setup-card').style.display = 'none';
+        document.getElementById('receipt-card').style.display = '';
+        document.getElementById('receiptCode').textContent = r.receipt.receipt_code;
+    } catch (err) { showAlert(err.message, 'danger'); }
+});
+document.addEventListener('DOMContentLoaded', init);
+</script>
+{% endblock %}

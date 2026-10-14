@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}My Enrolment - E-Voting Platform{% endblock %}
+{% block content %}
+<h2>My enrolment</h2>
+<p class="text-muted">Check your enrolment status, enrol if you are not on the roll, or update your address.</p>
+<div id="status-card" class="card mb-4"><div class="card-body">Loading...</div></div>
+
+<div class="card mb-4" id="form-card" style="display:none">
+    <div class="card-header"><h5 class="mb-0" id="form-title">Enrol to vote</h5></div>
+    <div class="card-body">
+        <form id="voterForm" class="row g-3">
+            <div class="col-md-6 enrol-only"><label class="form-label">First name</label><input class="form-control" name="first_name"></div>
+            <div class="col-md-6 enrol-only"><label class="form-label">Last name</label><input class="form-control" name="last_name"></div>
+            <div class="col-md-6 enrol-only"><label class="form-label">Date of birth</label><input type="date" class="form-control" name="date_of_birth"></div>
+            <div class="col-md-6 enrol-only"><div class="form-check mt-4"><input type="checkbox" class="form-check-input" name="is_overseas" id="is_overseas"><label for="is_overseas" class="form-check-label">I am currently overseas</label></div></div>
+            <div class="col-12"><label class="form-label">Address</label><input class="form-control" name="address_line" required></div>
+            <div class="col-md-4"><label class="form-label">Suburb</label><input class="form-control" name="suburb" required></div>
+            <div class="col-md-3"><label class="form-label">State</label>
+                <select class="form-select" name="state" id="stateSelect">
+                    {% for s in ['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'] %}<option>{{ s }}</option>{% endfor %}
+                </select></div>
+            <div class="col-md-2"><label class="form-label">Postcode</label><input class="form-control" name="postcode" required></div>
+            <div class="col-md-3"><label class="form-label">Division</label><select class="form-select" name="division_id" id="divisionSelect" required></select></div>
+            <div class="col-12"><button class="btn btn-success" type="submit" id="formBtn">Submit</button></div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let myVoter = null, allDivisions = [];
+
+function fillDivisions() {
+    const state = document.getElementById('stateSelect').value;
+    document.getElementById('divisionSelect').innerHTML = allDivisions.filter(d => d.state === state)
+        .map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+}
+
+async function load() {
+    if (!requireLogin()) return;
+    allDivisions = (await apiRequest('/elections/divisions')).divisions;
+    const me = await apiRequest('/voters/me');
+    myVoter = me.voter;
+    const card = document.getElementById('status-card');
+    const formCard = document.getElementById('form-card');
+    formCard.style.display = '';
+    if (!me.voter) {
+        card.innerHTML = '<div class="card-body"><span class="badge bg-secondary">Not enrolled</span> You are not on the electoral roll yet.</div>';
+        document.getElementById('form-title').textContent = 'Enrol to vote';
+    } else {
+        const badge = {enrolled: 'success', pending: 'warning', removed: 'danger'}[me.status];
+        card.innerHTML = `<div class="card-body"><span class="badge bg-${badge}">${esc(me.status)}</span>
+            <strong class="ms-2">${esc(me.voter.first_name)} ${esc(me.voter.last_name)}</strong>
+            <div class="text-muted mt-2">${esc(me.voter.address_line)}, ${esc(me.voter.suburb)} ${esc(me.voter.state)} ${esc(me.voter.postcode)} - Division of ${esc(me.voter.division_name)}</div>
+            ${me.status === 'enrolled' ? '<a class="btn btn-success mt-3" href="/vote">Go to voting</a>' : ''}</div>`;
+        document.getElementById('form-title').textContent = 'Update my address';
+        document.querySelectorAll('.enrol-only').forEach(el => el.style.display = 'none');
+        if (me.status !== 'enrolled') formCard.style.display = 'none';
+        const f = document.getElementById('voterForm');
+        f.address_line.value = me.voter.address_line; f.suburb.value = me.voter.suburb;
+        f.postcode.value = me.voter.postcode; f.state.value = me.voter.state;
+    }
+    fillDivisions();
+    if (myVoter) document.getElementById('divisionSelect').value = myVoter.division_id;
+}
+
+document.getElementById('stateSelect').addEventListener('change', fillDivisions);
+document.getElementById('voterForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target));
+    data.is_overseas = e.target.is_overseas.checked;
+    try {
+        if (myVoter) {
+            await apiRequest('/voters/me/address', { method: 'PUT', body: JSON.stringify(data) });
+            showAlert('Address updated', 'success');
+        } else {
+            await apiRequest('/voters/enrol', { method: 'POST', body: JSON.stringify(data) });
+            showAlert('Enrolment submitted - waiting for approval by an AEC officer', 'success');
+        }
+        load();
+    } catch (err) { showAlert(err.message, 'danger'); }
+});
+document.addEventListener('DOMContentLoaded', load);
+</script>
+{% endblock %}

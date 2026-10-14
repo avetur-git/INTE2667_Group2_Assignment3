@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Staff Portal - E-Voting Platform{% endblock %}
+{% block content %}
+<h2>Staff portal <small class="text-muted fs-6" id="roleLabel"></small></h2>
+<div class="row g-4">
+
+  <!-- AEC officer / admin: voters -->
+  <div class="col-12 role-section" data-roles="aec_officer election_admin">
+    <div class="card"><div class="card-header"><h5 class="mb-0">Voters</h5></div><div class="card-body">
+      <h6>Register a citizen</h6>
+      <form id="registerVoterForm" class="row g-2 mb-4">
+        <div class="col-md-3"><input class="form-control" name="first_name" placeholder="First name" required></div>
+        <div class="col-md-3"><input class="form-control" name="last_name" placeholder="Last name" required></div>
+        <div class="col-md-3"><input type="date" class="form-control" name="date_of_birth" required></div>
+        <div class="col-md-3"><input class="form-control" name="address_line" placeholder="Address" required></div>
+        <div class="col-md-3"><input class="form-control" name="suburb" placeholder="Suburb" required></div>
+        <div class="col-md-2"><select class="form-select" name="state" id="rvState">{% for s in ['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'] %}<option>{{ s }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><input class="form-control" name="postcode" placeholder="Postcode" required></div>
+        <div class="col-md-3"><select class="form-select" name="division_id" id="rvDivision" required></select></div>
+        <div class="col-md-2"><div class="form-check mt-2"><input type="checkbox" class="form-check-input" name="is_overseas" id="rvOverseas"><label class="form-check-label" for="rvOverseas">Overseas</label></div></div>
+        <div class="col-md-3"><input class="form-control" name="username" placeholder="Login username (optional)"></div>
+        <div class="col-md-3"><input class="form-control" name="email" placeholder="Login email"></div>
+        <div class="col-md-3"><input type="password" class="form-control" name="password" placeholder="Login password"></div>
+        <div class="col-md-3"><button class="btn btn-success w-100">Register citizen</button></div>
+      </form>
+      <h6>Enrolments waiting for approval <button class="btn btn-sm btn-outline-secondary ms-2" onclick="loadPending()">Refresh</button></h6>
+      <div id="pendingList" class="table-responsive"></div>
+    </div></div>
+  </div>
+
+  <!-- Delegate: candidates -->
+  <div class="col-12 role-section" data-roles="commissioner_delegate election_admin">
+    <div class="card"><div class="card-header"><h5 class="mb-0">Candidates</h5></div><div class="card-body">
+      <div class="row g-2 mb-3">
+        <div class="col-md-4"><select class="form-select" id="candElection"></select></div>
+        <div class="col-md-2"><button class="btn btn-outline-secondary" onclick="loadCandidates()">Show candidates</button></div>
+      </div>
+      <form id="candidateForm" class="row g-2 mb-3 delegate-only">
+        <div class="col-md-2"><select class="form-select" name="contest_type" id="candContest"><option value="house">House</option><option value="senate">Senate</option></select></div>
+        <div class="col-md-3"><input class="form-control" name="name" placeholder="Candidate name" required></div>
+        <div class="col-md-2"><input class="form-control" name="party" placeholder="Party"></div>
+        <div class="col-md-2 house-field"><select class="form-select" name="division_id" id="candDivision"></select></div>
+        <div class="col-md-1 house-field"><input class="form-control" name="ballot_position" type="number" placeholder="Pos."></div>
+        <div class="col-md-2 senate-field" style="display:none"><select class="form-select" name="state">{% for s in ['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'] %}<option>{{ s }}</option>{% endfor %}</select></div>
+        <div class="col-md-1 senate-field" style="display:none"><input class="form-control" name="group_code" placeholder="Grp"></div>
+        <div class="col-md-1 senate-field" style="display:none"><input class="form-control" name="group_order" type="number" placeholder="Order"></div>
+        <div class="col-md-1"><button class="btn btn-success w-100">Add</button></div>
+      </form>
+      <div id="candidateList" class="table-responsive"></div>
+    </div></div>
+  </div>
+
+  <!-- Admin: elections, terminals, users, audit -->
+  <div class="col-12 role-section" data-roles="election_admin">
+    <div class="card"><div class="card-header"><h5 class="mb-0">Elections</h5></div><div class="card-body">
+      <form id="electionForm" class="row g-2 mb-3">
+        <div class="col-md-5"><input class="form-control" name="name" placeholder="Election name" required></div>
+        <div class="col-md-3"><input type="date" class="form-control" name="election_date" required></div>
+        <div class="col-md-2"><button class="btn btn-success w-100">Create</button></div>
+      </form>
+      <div id="electionList" class="table-responsive"></div>
+    </div></div>
+  </div>
+
+  <div class="col-md-6 role-section" data-roles="election_admin">
+    <div class="card h-100"><div class="card-header"><h5 class="mb-0">Voting terminals</h5></div><div class="card-body">
+      <form id="terminalForm" class="row g-2 mb-3">
+        <div class="col-6"><input class="form-control" name="terminal_id" placeholder="Terminal ID" required></div>
+        <div class="col-6"><select class="form-select" name="channel"><option value="polling_station">Polling station</option><option value="diplomatic_mission">Diplomatic mission</option></select></div>
+        <div class="col-8"><input class="form-control" name="location_name" placeholder="Location" required></div>
+        <div class="col-4"><button class="btn btn-success w-100">Add</button></div>
+      </form>
+      <div id="terminalList" style="max-height:260px;overflow:auto"></div>
+    </div></div>
+  </div>
+
+  <div class="col-md-6 role-section" data-roles="election_admin">
+    <div class="card h-100"><div class="card-header"><h5 class="mb-0">Create staff account</h5></div><div class="card-body">
+      <form id="staffForm" class="row g-2">
+        <div class="col-6"><input class="form-control" name="username" placeholder="Username" required></div>
+        <div class="col-6"><input class="form-control" name="email" placeholder="Email" required></div>
+        <div class="col-6"><input type="password" class="form-control" name="password" placeholder="Password" required></div>
+        <div class="col-6"><select class="form-select" name="role"><option value="aec_officer">AEC officer</option><option value="commissioner_delegate">Commissioner's delegate</option><option value="election_admin">Election admin</option></select></div>
+        <div class="col-12"><button class="btn btn-success">Create account</button></div>
+      </form>
+    </div></div>
+  </div>
+
+  <div class="col-12 role-section" data-roles="election_admin">
+    <div class="card"><div class="card-header d-flex justify-content-between"><h5 class="mb-0">Audit log</h5>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadAudit()">Refresh</button></div>
+      <div class="card-body"><div id="auditList" class="table-responsive" style="max-height:300px;overflow:auto"></div></div></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let divisions = [], elections = [];
+const isRole = (...r) => r.includes(currentRole);
+
+async function post(url, body, method = 'POST') {
+    return apiRequest(url, { method, body: body ? JSON.stringify(body) : undefined });
+}
+const formData = f => Object.fromEntries(new FormData(f));
+
+async function init() {
+    if (!requireLogin()) return;
+    if (currentRole === 'voter') { window.location.href = '/dashboard'; return; }
+    document.getElementById('roleLabel').textContent = '(' + currentRole.replace('_', ' ') + ')';
+    document.querySelectorAll('.role-section').forEach(s => { s.style.display = s.dataset.roles.split(' ').includes(currentRole) ? '' : 'none'; });
+    document.querySelectorAll('.delegate-only').forEach(s => { if (currentRole !== 'commissioner_delegate') s.style.display = 'none'; });
+    divisions = (await apiRequest('/elections/divisions')).divisions;
+    fillDivisionSelects();
+    await loadElections();
+    if (isRole('aec_officer', 'election_admin')) loadPending();
+    if (isRole('election_admin')) { loadTerminals(); loadAudit(); }
+}
+
+function fillDivisionSelects() {
+    const opts = (state) => divisions.filter(d => !state || d.state === state).map(d => `<option value="${d.id}">${esc(d.name)} (${esc(d.state)})</option>`).join('');
+    document.getElementById('rvDivision').innerHTML = opts(document.getElementById('rvState').value);
+    document.getElementById('candDivision').innerHTML = opts();
+}
+document.getElementById('rvState').addEventListener('change', fillDivisionSelects);
+document.getElementById('candContest').addEventListener('change', e => {
+    document.querySelectorAll('.house-field').forEach(x => x.style.display = e.target.value === 'house' ? '' : 'none');
+    document.querySelectorAll('.senate-field').forEach(x => x.style.display = e.target.value === 'senate' ? '' : 'none');
+});
+
+// ---- voters
+document.getElementById('registerVoterForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = formData(e.target); d.is_overseas = e.target.is_overseas.checked;
+    Object.keys(d).forEach(k => { if (d[k] === '') delete d[k]; });
+    try { await post('/voters/', d); showAlert('Citizen registered', 'success'); e.target.reset(); fillDivisionSelects(); }
+    catch (err) { showAlert(err.message, 'danger'); }
+});
+async function loadPending() {
+    const r = await apiRequest('/voters/?status=pending');
+    document.getElementById('pendingList').innerHTML = r.voters.length ?
+        `<table class="table table-sm"><thead><tr><th>Name</th><th>Address</th><th>Division</th><th></th></tr></thead><tbody>` +
+        r.voters.map(v => `<tr><td>${esc(v.first_name)} ${esc(v.last_name)}</td><td>${esc(v.address_line)}, ${esc(v.suburb)}</td><td>${esc(v.division_name)}</td>
+        <td><button class="btn btn-sm btn-success" onclick="voterAction(${v.id},'approve')">Approve</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="voterAction(${v.id},'remove')">Reject</button></td></tr>`).join('') + '</tbody></table>'
+        : '<p class="text-muted">No pending enrolments.</p>';
+}
+async function voterAction(id, action) {
+    try { await post(`/voters/${id}/${action}`, null, 'PUT'); loadPending(); } catch (err) { showAlert(err.message, 'danger'); }
+}
+
+// ---- elections
+async function loadElections() {
+    elections = (await apiRequest('/elections/')).elections;
+    const opts = elections.map(e => `<option value="${e.id}">${esc(e.name)} [${esc(e.status)}]</option>`).join('');
+    document.getElementById('candElection').innerHTML = opts;
+    const list = document.getElementById('electionList');
+    if (!isRole('election_admin')) return;
+    list.innerHTML = '<table class="table table-sm"><thead><tr><th>Name</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>' +
+        elections.map(e => `<tr><td>${esc(e.name)}</td><td>${esc(e.election_date)}</td><td><span class="badge bg-secondary">${esc(e.status)}</span></td><td>
+        ${e.status === 'draft' ? `<button class="btn btn-sm btn-success" onclick="setStatus(${e.id},'open')">Open voting</button>` : ''}
+        ${e.status === 'open' ? `<button class="btn btn-sm btn-warning" onclick="setStatus(${e.id},'closed')">Close voting</button>` : ''}
+        ${['closed', 'counted'].includes(e.status) ? `<button class="btn btn-sm btn-primary" onclick="tally(${e.id})">${e.status === 'counted' ? 'Re-run tally' : 'Run tally'}</button>` : ''}
+        ${e.status === 'counted' ? `<button class="btn btn-sm btn-outline-secondary" onclick="exportResults(${e.id})">Export JSON</button>` : ''}
+        <button class="btn btn-sm btn-outline-secondary" onclick="turnout(${e.id})">Turnout</button></td></tr>`).join('') + '</tbody></table>';
+}
+document.getElementById('electionForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await post('/elections/', formData(e.target)); e.target.reset(); loadElections(); } catch (err) { showAlert(err.message, 'danger'); }
+});
+async function setStatus(id, status) { try { await post(`/elections/${id}/status`, { status }, 'PUT'); loadElections(); } catch (err) { showAlert(err.message, 'danger'); } }
+async function tally(id) { try { const r = await post(`/elections/${id}/tally`); showAlert(`Tally complete: ${r.house_contests} House contests, ${r.senate_contests} Senate contests`, 'success'); loadElections(); } catch (err) { showAlert(err.message, 'danger'); } }
+async function turnout(id) { try { const r = await apiRequest(`/elections/${id}/turnout`); showAlert(`Voters who voted: ${r.voters_who_voted} (online ${r.by_channel.online}, polling station ${r.by_channel.polling_station}, mission ${r.by_channel.diplomatic_mission})`, 'info'); } catch (err) { showAlert(err.message, 'danger'); } }
+async function exportResults(id) {
+    try {
+        const r = await apiRequest(`/results/${id}/export`);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }));
+        a.download = `election-${id}-results.json`; a.click();
+    } catch (err) { showAlert(err.message, 'danger'); }
+}
+
+// ---- candidates
+async function loadCandidates() {
+    const id = document.getElementById('candElection').value; if (!id) return;
+    const r = await apiRequest(`/candidates/?election_id=${id}`);
+    document.getElementById('candidateList').innerHTML = '<table class="table table-sm"><thead><tr><th>Contest</th><th>Where</th><th>Name</th><th>Party</th><th>Group / pos.</th><th></th></tr></thead><tbody>' +
+        r.candidates.map(c => `<tr class="${c.is_excluded ? 'table-danger' : ''}"><td>${esc(c.contest_type)}</td>
+        <td>${esc(c.contest_type === 'house' ? 'Div ' + c.division_id : c.state)}</td><td>${esc(c.name)}</td><td>${esc(c.party)}</td>
+        <td>${esc(c.contest_type === 'house' ? c.ballot_position : (c.group_code + '-' + c.group_order))}</td>
+        <td>${c.is_excluded ? 'Excluded' : (currentRole === 'commissioner_delegate' ? `<button class="btn btn-sm btn-outline-danger" onclick="excludeCandidate(${c.id})">Exclude</button>` : '')}</td></tr>`).join('') + '</tbody></table>';
+}
+document.getElementById('candidateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const d = formData(e.target); d.election_id = parseInt(document.getElementById('candElection').value);
+    Object.keys(d).forEach(k => { if (d[k] === '') delete d[k]; });
+    ['division_id', 'ballot_position', 'group_order'].forEach(k => { if (d[k]) d[k] = parseInt(d[k]); });
+    try { await post('/candidates/', d); showAlert('Candidate added', 'success'); loadCandidates(); } catch (err) { showAlert(err.message, 'danger'); }
+});
+async function excludeCandidate(id) {
+    const reason = prompt('Reason / court order reference for excluding this candidate:'); if (!reason) return;
+    try { await post(`/candidates/${id}/exclude`, { reason }); showAlert('Candidate excluded. Re-run the tally to recount.', 'success'); loadCandidates(); }
+    catch (err) { showAlert(err.message, 'danger'); }
+}
+
+// ---- terminals, staff, audit
+async function loadTerminals() {
+    const r = await apiRequest('/terminals/');
+    document.getElementById('terminalList').innerHTML = '<table class="table table-sm"><tbody>' + r.terminals.map(t =>
+        `<tr><td>${esc(t.terminal_id)}</td><td>${esc(t.location_name)}</td><td>${t.is_active ? 'active' : 'inactive'}</td></tr>`).join('') + '</tbody></table>';
+}
+document.getElementById('terminalForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await post('/terminals/', formData(e.target)); e.target.reset(); loadTerminals(); } catch (err) { showAlert(err.message, 'danger'); }
+});
+document.getElementById('staffForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try { await post('/admin/users', formData(e.target)); showAlert('Staff account created', 'success'); e.target.reset(); } catch (err) { showAlert(err.message, 'danger'); }
+});
+async function loadAudit() {
+    const r = await apiRequest('/admin/audit-logs?limit=50');
+    document.getElementById('auditList').innerHTML = '<table class="table table-sm"><thead><tr><th>Time (UTC)</th><th>User</th><th>Action</th><th>Object</th><th>OK</th></tr></thead><tbody>' +
+        r.logs.map(l => `<tr><td>${esc(l.created_at)}</td><td>${esc(l.username)}</td><td>${esc(l.action)}</td><td>${esc(l.object_type)} ${esc(l.object_id)}</td><td>${l.success ? '✓' : '✗'}</td></tr>`).join('') + '</tbody></table>';
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+{% endblock %}
