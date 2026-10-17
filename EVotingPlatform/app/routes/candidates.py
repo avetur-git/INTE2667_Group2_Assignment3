@@ -65,6 +65,7 @@ def add_candidate(current_user):
     db.session.flush()   # gives the candidate an id
     record_change(cand, 'created', {'name': {'old': None, 'new': cand.name}}, current_user)
     db.session.commit()
+    log_action('CANDIDATE_ADDED', user=current_user, object_type='candidate', object_id=cand.id)
     return jsonify({'candidate': cand.to_dict()}), C.HTTP_CREATED
 
 
