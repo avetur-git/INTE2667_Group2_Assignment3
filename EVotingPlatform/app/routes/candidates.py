@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
-from EVotingPlatform.app.models.candidateHistory import CandidateHistory
-from EVotingPlatform.app.models.user import User
+from app.models.candidateHistory import CandidateHistory
+from app.models.user import User
 from app import db
 from app.models.candidate import Candidate
 from app.models.election import Election, Division
