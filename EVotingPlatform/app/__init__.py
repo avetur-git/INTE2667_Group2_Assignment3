@@ -24,6 +24,10 @@ def create_app(test_config=None):
     # Configuration (development defaults - see .env.example)
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-me-0123456789abcdef')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///evoting.db')
+    # REQ-01: ballots live in their own database file, apart from the voter data
+    app.config['SQLALCHEMY_BINDS'] = {
+        'ballots': os.environ.get('BALLOT_DATABASE_URL', 'sqlite:///ballots.db')
+    }
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-jwt-secret-key-change-me-0123456789abcdef')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=int(os.environ.get('JWT_EXPIRES_HOURS', 8)))
