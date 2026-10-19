@@ -3,6 +3,7 @@ from app.models.candidate import Candidate
 from app.models.terminal import Terminal
 from app.models.voter import VoteRecord
 from app.security.hooks import hooks
+from app.security.tokens import issue_token
 from app.services import ballot_store
 from app.services.audit import log_action
 from app.services.ballot_validation import validate_house, validate_senate
@@ -92,8 +93,11 @@ def cast_vote(voter, election, payload, channel, terminal_id, user, request_meta
     try:
         db.session.add(VoteRecord(voter_id=voter.id, election_id=election.id, channel=channel,
                                   terminal_id=terminal.terminal_id if terminal else None))
+        # REQ-01: the voter side hands over only a one-time token, never the voter's identity
+        token = issue_token()
         ballot = ballot_store.save_ballot(
-            election=election, division_id=voter.division_id, state=voter.state,
+            token=token,
+            election=election, division_id=voter.division_id, state=voter.state, 
             house_order=house_order,
             senate_atl=payload.get('senate_atl') or None,
             senate_btl=payload.get('senate_btl') or None,

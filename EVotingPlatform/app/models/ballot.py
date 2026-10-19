@@ -25,3 +25,13 @@ class Ballot(db.Model):
     receipt_code = db.Column(db.String(32), unique=True, nullable=False)
     ballot_hash = db.Column(db.String(128), nullable=True)   # filled by REQ-02 hook
     cast_date = db.Column(db.Date, default=lambda: utcnow().date())
+
+
+
+
+class SpentToken(db.Model):
+    """REQ-01: one row per ballot token already used. The primary key makes a second use fail."""
+    __tablename__ = 'spent_tokens'
+    __bind_key__ = 'ballots'
+
+    nonce = db.Column(db.String(32), primary_key=True)
