@@ -94,7 +94,6 @@ def cast_vote(voter, election, payload, channel, terminal_id, user, request_meta
                                   terminal_id=terminal.terminal_id if terminal else None))
         ballot = ballot_store.save_ballot(
             election=election, division_id=voter.division_id, state=voter.state,
-            channel=channel, terminal_id=terminal.terminal_id if terminal else None,
             house_order=house_order,
             senate_atl=payload.get('senate_atl') or None,
             senate_btl=payload.get('senate_btl') or None,

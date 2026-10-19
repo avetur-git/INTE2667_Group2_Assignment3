@@ -3,18 +3,18 @@ from app.utils.helpers import utcnow
 
 
 class Ballot(db.Model):
-    """One cast ballot (House + Senate papers together). Contains NO voter id.
-    Only the date is stored (not the time) to make timing-based matching with
-    vote_records harder."""
+    """One cast ballot (House + Senate papers together).
+
+    REQ-01: stored in its own database (ballots.db). Contains NO voter id,
+    user id, session id, channel or terminal id, and only the date, never the time."""
     __tablename__ = 'ballots'
+    __bind_key__ = 'ballots'
 
     id = db.Column(db.Integer, primary_key=True)
     ballot_uid = db.Column(db.String(36), unique=True, nullable=False)
-    election_id = db.Column(db.Integer, db.ForeignKey('elections.id'), nullable=False)
-    division_id = db.Column(db.Integer, db.ForeignKey('divisions.id'), nullable=False)
+    election_id = db.Column(db.Integer, nullable=False, index=True)  # plain number: no cross-database foreign key
+    division_id = db.Column(db.Integer, nullable=False)
     state = db.Column(db.String(3), nullable=False)
-    channel = db.Column(db.String(20), nullable=False)
-    terminal_id = db.Column(db.String(50), nullable=True)
 
     house_order = db.Column(db.JSON, nullable=False)     # candidate ids, most preferred first
     senate_atl = db.Column(db.JSON, nullable=True)       # {group_code: number} as entered

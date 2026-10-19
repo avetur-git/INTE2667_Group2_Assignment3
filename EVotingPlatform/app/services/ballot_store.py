@@ -8,16 +8,13 @@ from app.models.ballot import Ballot
 from app.security.hooks import hooks
 from app.utils.helpers import generate_uuid, generate_receipt_code
 
-
-def save_ballot(*, election, division_id, state, channel, terminal_id,
+def save_ballot(*, election, division_id, state,
                 house_order, senate_atl, senate_btl, senate_order, senate_source):
     ballot = Ballot(
         ballot_uid=generate_uuid(),
         election_id=election.id,
         division_id=division_id,
         state=state,
-        channel=channel,
-        terminal_id=terminal_id,
         house_order=hooks.run('protect_data', house_order),
         senate_atl=hooks.run('protect_data', senate_atl),
         senate_btl=hooks.run('protect_data', senate_btl),
