@@ -5,6 +5,7 @@ from app import create_app, db
 @pytest.fixture()
 def app():
     app = create_app({'TESTING': True, 'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+                      'SQLALCHEMY_BINDS': {'ballots': 'sqlite:///:memory:'},
                       'BCRYPT_ROUNDS': 4})
     with app.app_context():
         yield app
