@@ -19,6 +19,12 @@ Security properties:
   * Checked on the server for every request - the role is read from the
     database each time, never trusted from the browser or the login token.
 """
+from functools import wraps
+
+from flask import jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt_identity
+
+from app import db
 from app.utils import constants as C
 
 
@@ -101,3 +107,43 @@ def has_permission(user, permission):
     if user is None or not user.is_active:
         return False
     return permission in permissions_for(user.role)
+
+
+def permission_required(permission):
+    """Protect a route with one permission. Injects current_user, like the
+    old roles_required, so route bodies do not change.
+
+        @bp.route('/', methods=['POST'])
+        @permission_required(P.CANDIDATE_MANAGE)
+        def add_candidate(current_user): ...
+
+    401 - not logged in, unknown user, or account disabled (authentication)
+    403 - logged in, but the role does not grant this permission (authorisation)
+    """
+    if permission not in ALL_PERMISSIONS:
+        # Caught when the app starts, not when a user hits the route.
+        raise ValueError(f'Unknown permission: {permission!r}')
+
+    def wrapper(f):
+        @wraps(f)
+        @jwt_required()
+        def decorated(*args, **kwargs):
+            from app.models.user import User          # avoid a circular import
+            from app.services.audit import log_action
+
+            user = db.session.get(User, int(get_jwt_identity()))
+            if not user or not user.is_active:
+                return jsonify({'error': C.ERROR_USER_INACTIVE}), C.HTTP_UNAUTHORIZED
+
+            if not has_permission(user, permission):
+                # Every refusal is recorded (REQ-15 fields come from log_action).
+                log_action('ACCESS_DENIED', user=user, object_type='endpoint',
+                           object_id=request.endpoint, success=False,
+                           details={'role': user.role, 'permission': permission})
+                return jsonify({'error': C.ERROR_ACCESS_DENIED}), C.HTTP_FORBIDDEN
+
+            return f(current_user=user, *args, **kwargs)
+
+        decorated.required_permission = permission   # lets tests check every route
+        return decorated
+    return wrapper
