@@ -36,3 +36,20 @@ class AuditLog(db.Model):
             'success': self.success,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class AuditArchiveBatch(db.Model):
+    """REQ-05: one batch of audit entries copied to write-once (WORM) storage.
+    Records which entries are archived, where, and the SHA-256 of the object, so
+    the archive can be checked against the database later."""
+    __tablename__ = 'audit_archive_batches'
+
+    id = db.Column(db.Integer, primary_key=True)
+    first_id = db.Column(db.Integer, nullable=False, unique=True)   # audit_logs.id range
+    last_id = db.Column(db.Integer, nullable=False)
+    entry_count = db.Column(db.Integer, nullable=False)
+    object_key = db.Column(db.String(200), nullable=False)
+    version_id = db.Column(db.String(100), nullable=True)
+    sha256 = db.Column(db.String(64), nullable=False)
+    retain_until = db.Column(db.DateTime, nullable=False)
+    archived_at = db.Column(db.DateTime, default=utcnow)

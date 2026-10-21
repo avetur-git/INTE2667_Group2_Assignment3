@@ -29,3 +29,30 @@ def register_cli(app):
         minutes = int(ENROLMENT_CODE_TTL.total_seconds() // 60)
         click.echo(f'Enrolment code for {user.username}: {code}')
         click.echo(f'Single use, expires in {minutes} minutes. Register the key at /mfa/enrol')
+
+    @app.cli.command('archive-audit-logs')
+    def archive_audit_logs_command():
+        """REQ-05: copy any audit entries not yet archived to the write-once store now."""
+        from app.security.audit_protection import archive_enabled, archive_pending
+        if not archive_enabled():
+            raise click.ClickException('Audit archive is not configured (AUDIT_ARCHIVE_ENDPOINT)')
+        batch = archive_pending(force=True)
+        if batch:
+            click.echo(f'Archived entries {batch.first_id}-{batch.last_id} to {batch.object_key}, '
+                       f'locked until {batch.retain_until:%Y-%m-%d %H:%M} UTC')
+        else:
+            click.echo('Nothing to archive')
+
+    @app.cli.command('verify-audit-archive')
+    def verify_audit_archive_command():
+        """REQ-05: check the audit table still matches what was locked in the archive."""
+        from app.models.audit import AuditArchiveBatch
+        from app.security.audit_protection import archive_enabled, verify_archive
+        if not archive_enabled():
+            raise click.ClickException('Audit archive is not configured (AUDIT_ARCHIVE_ENDPOINT)')
+        problems = verify_archive()
+        for problem in problems:
+            click.echo(f'PROBLEM {problem}')
+        if problems:
+            raise click.ClickException(f'{len(problems)} archived batch(es) do not match the database')
+        click.echo(f'OK: {AuditArchiveBatch.query.count()} archived batch(es) match the database')

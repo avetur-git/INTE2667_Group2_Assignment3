@@ -101,4 +101,10 @@ def create_app(test_config=None):
     from app.security.receipts import register_signed_receipts
     register_signed_receipts()
 
+    # REQ-05: append-only audit table and write-once archive. Keep this LAST:
+    # it needs the tables to exist, and it wraps whatever write_audit_record
+    # hook is registered above (for example REQ-04's hash chain).
+    from app.security.audit_protection import init_app as init_audit_protection
+    init_audit_protection(app)
+
     return app
