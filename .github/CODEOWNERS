@@ -1,0 +1,15 @@
+# REQ-06: changes to infrastructure, firewall rules, database access, and the
+# pipeline and review rules that enforce them need approval from the platform
+# owner. This only blocks merges while the main branch rule has "Require review
+# from Code Owners" turned on (see .github/rulesets/main.json).
+#
+# Later lines take precedence over earlier ones.
+
+/EVotingPlatform/infra/              @avetur-git
+/EVotingPlatform/tests/iac/          @avetur-git
+/EVotingPlatform/Dockerfile          @avetur-git
+/EVotingPlatform/docker-compose.yml  @avetur-git
+
+# The workflows, this file and the ruleset: without this, a PR could weaken
+# the checks or remove the owner requirement in the same change.
+/.github/                            @avetur-git
