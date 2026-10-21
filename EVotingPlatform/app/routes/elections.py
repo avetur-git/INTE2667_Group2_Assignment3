@@ -4,12 +4,12 @@ from app import db
 from app.models.election import Election, Division
 from app.models.voter import VoteRecord
 from app.services import ballot_store
-from app.services.audit import log_action
 from app.services.errors import ServiceError
 from app.services.tallying import tally_election
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields
 from app.security.rbac import P, permission_required
+from app.security.audit_trail import audit, audited
 
 elections_bp = Blueprint('elections', __name__)
 
@@ -37,6 +37,7 @@ def list_elections():
 
 @elections_bp.route('/', methods=['POST'])
 @permission_required(P.ELECTION_MANAGE)
+@audited('ELECTION_CREATED', object_type='election')
 def create_election(current_user):
     data = request.get_json(silent=True)
     ok, error = validate_required_fields(data, ['name', 'election_date'])
@@ -50,7 +51,7 @@ def create_election(current_user):
                         senate_seats_override=data.get('senate_seats_override'))
     db.session.add(election)
     db.session.commit()
-    log_action('ELECTION_CREATED', user=current_user, object_type='election', object_id=election.id)
+    audit.target(election.id)
     return jsonify({'election': election.to_dict()}), C.HTTP_CREATED
 
 
@@ -64,6 +65,7 @@ def get_election(election_id):
 
 @elections_bp.route('/<int:election_id>/status', methods=['PUT'])
 @permission_required(P.ELECTION_MANAGE)
+@audited('ELECTION_STATUS_CHANGED', object_type='election')
 def set_status(current_user, election_id):
     """Open or close an election - an election configuration change (REQ-04, REQ-06)."""
     election = Election.query.get(election_id)
@@ -75,13 +77,13 @@ def set_status(current_user, election_id):
     old = election.status
     election.status = new_status
     db.session.commit()
-    log_action('ELECTION_STATUS_CHANGED', user=current_user, object_type='election',
-               object_id=election.id, details={'from': old, 'to': new_status})
+    audit.details.update({'from': old, 'to': new_status})
     return jsonify({'election': election.to_dict()}), C.HTTP_OK
 
 
 @elections_bp.route('/<int:election_id>/turnout', methods=['GET'])
 @permission_required(P.TURNOUT_READ)
+@audited('TURNOUT_VIEWED', object_type='election')
 def turnout(current_user, election_id):
     """How many people have voted, by channel. Never shows how anyone voted."""
     election = Election.query.get(election_id)
@@ -97,6 +99,7 @@ def turnout(current_user, election_id):
 
 @elections_bp.route('/<int:election_id>/tally', methods=['POST'])
 @permission_required(P.ELECTION_TALLY)
+@audited('ELECTION_TALLIED', object_type='election')
 def tally(current_user, election_id):
     """Compute results (can be re-run, for example after a court-ordered exclusion)."""
     election = Election.query.get(election_id)
@@ -106,8 +109,7 @@ def tally(current_user, election_id):
         summary = tally_election(election, current_user)
     except ServiceError as e:
         return jsonify({'error': e.message}), e.status
-    log_action('ELECTION_TALLIED', user=current_user, object_type='election', object_id=election.id,
-               details={'flagged_ballots': len(summary['flagged_ballots'])})
+    audit.details['flagged_ballots'] = len(summary['flagged_ballots'])
     return jsonify({'message': 'Tally complete', 'election': election.to_dict(),
                     'flagged_ballots': summary['flagged_ballots'],
                     'house_contests': len(summary['house']),

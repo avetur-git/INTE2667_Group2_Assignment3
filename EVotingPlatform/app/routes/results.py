@@ -1,9 +1,9 @@
 from flask import Blueprint, request, jsonify
 from app.models.election import Election
-from app.services.audit import log_action
 from app.services.tallying import stored_results, export_results
 from app.utils import constants as C
 from app.security.rbac import P, permission_required
+from app.security.audit_trail import audited
 
 results_bp = Blueprint('results', __name__)
 
@@ -33,6 +33,7 @@ def public_results(election_id):
 
 @results_bp.route('/<int:election_id>/detail', methods=['GET'])
 @permission_required(P.RESULTS_DETAIL_READ)
+@audited('RESULTS_DETAIL_VIEWED', object_type='election')
 def detailed_results(current_user, election_id):
     """Full counts with every round, for the election admin."""
     election, err = _counted_election(election_id)
@@ -43,11 +44,11 @@ def detailed_results(current_user, election_id):
 
 @results_bp.route('/<int:election_id>/export', methods=['GET'])
 @permission_required(P.RESULTS_EXPORT)
+@audited('RESULTS_EXPORTED', object_type='election')
 def export(current_user, election_id):
     """Results package for sharing with external systems."""
     election, err = _counted_election(election_id)
     if err:
         return err
     package = export_results(election)
-    log_action('RESULTS_EXPORTED', user=current_user, object_type='election', object_id=election_id)
     return jsonify(package), C.HTTP_OK

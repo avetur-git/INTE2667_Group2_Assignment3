@@ -2,16 +2,17 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models.audit import AuditLog
 from app.models.user import User
-from app.services.audit import log_action
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields
 from app.security.rbac import P, permission_required
+from app.security.audit_trail import audit, audited
 
 admin_bp = Blueprint('admin', __name__)
 
 
 @admin_bp.route('/users', methods=['POST'])
 @permission_required(P.STAFF_MANAGE)
+@audited('STAFF_USER_CREATED', object_type='user')
 def create_staff_user(current_user):
     """Create a staff account (AEC officer, Commissioner's delegate, or admin)."""
     data = request.get_json(silent=True)
@@ -26,14 +27,16 @@ def create_staff_user(current_user):
     user = User(data['username'].strip(), data['email'].strip().lower(), data['password'], data['role'])
     db.session.add(user)
     db.session.commit()
-    log_action('STAFF_USER_CREATED', user=current_user, object_type='user', object_id=user.id,
-               details={'role': user.role})
+    audit.target(user.id)
+    audit.details['role'] = user.role
     return jsonify({'user': user.to_dict()}), C.HTTP_CREATED
 
 
 @admin_bp.route('/audit-logs', methods=['GET'])
 @permission_required(P.AUDIT_READ)
+@audited('AUDIT_LOG_VIEWED', object_type='audit_log')
 def audit_logs(current_user):
+    audit.details.update({k: request.args[k] for k in ('action', 'username', 'limit') if k in request.args})
     q = AuditLog.query
     if request.args.get('action'):
         q = q.filter_by(action=request.args['action'])

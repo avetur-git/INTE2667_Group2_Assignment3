@@ -9,6 +9,7 @@ from app.services.eligibility import check_eligibility
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields
 from app.security.rbac import P, permission_required
+from app.security.audit_trail import audit, audited
 
 voters_bp = Blueprint('voters', __name__)
 
@@ -107,6 +108,7 @@ def my_eligibility(current_user):
 
 @voters_bp.route('/', methods=['POST'])
 @permission_required(P.VOTER_REGISTER)
+@audited('VOTER_REGISTERED', object_type='voter')
 def register_citizen(current_user):
     """An AEC employee registers a citizen. Optionally creates their login too."""
     data = request.get_json(silent=True) or {}
@@ -130,12 +132,13 @@ def register_citizen(current_user):
                   registered_via='aec_officer', registered_by=current_user.id, **clean)
     db.session.add(voter)
     db.session.commit()
-    log_action('VOTER_REGISTERED', user=current_user, object_type='voter', object_id=voter.id)
+    audit.target(voter.id)
     return jsonify({'message': 'Citizen registered', 'voter': voter.to_dict()}), C.HTTP_CREATED
 
 
 @voters_bp.route('/', methods=['GET'])
 @permission_required(P.VOTER_READ)
+@audited('VOTER_ROLL_VIEWED', object_type='voter')
 def list_voters(current_user):
     q = Voter.query
     status = request.args.get('status')
@@ -145,27 +148,30 @@ def list_voters(current_user):
     if name:
         like = f'%{name}%'
         q = q.filter(db.or_(Voter.first_name.ilike(like), Voter.last_name.ilike(like)))
+    # Record what was searched, but not the name itself (it is personal data)
+    audit.details.update({'status': status, 'name_search': bool(name)})
     voters = q.order_by(Voter.id.desc()).limit(100).all()
     return jsonify({'voters': [v.to_dict() for v in voters], 'total': len(voters)}), C.HTTP_OK
 
 
-def _set_status(voter_id, status, action, current_user):
+def _set_status(voter_id, status):
     voter = Voter.query.get(voter_id)
     if not voter:
         return jsonify({'error': C.ERROR_VOTER_NOT_FOUND}), C.HTTP_NOT_FOUND
     voter.enrolment_status = status
     db.session.commit()
-    log_action(action, user=current_user, object_type='voter', object_id=voter.id)
     return jsonify({'message': f'Voter {status}', 'voter': voter.to_dict()}), C.HTTP_OK
 
 
 @voters_bp.route('/<int:voter_id>/approve', methods=['PUT'])
 @permission_required(P.VOTER_STATUS_CHANGE)
+@audited('VOTER_APPROVED', object_type='voter')
 def approve_voter(current_user, voter_id):
-    return _set_status(voter_id, C.ENROLMENT_ENROLLED, 'VOTER_APPROVED', current_user)
+    return _set_status(voter_id, C.ENROLMENT_ENROLLED)
 
 
 @voters_bp.route('/<int:voter_id>/remove', methods=['PUT'])
 @permission_required(P.VOTER_STATUS_CHANGE)
+@audited('VOTER_REMOVED', object_type='voter')
 def remove_voter(current_user, voter_id):
-    return _set_status(voter_id, C.ENROLMENT_REMOVED, 'VOTER_REMOVED', current_user)
+    return _set_status(voter_id, C.ENROLMENT_REMOVED)
