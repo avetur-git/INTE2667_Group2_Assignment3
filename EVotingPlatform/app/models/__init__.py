@@ -8,7 +8,8 @@ from .terminal import Terminal
 from .audit import AuditLog
 from .tally import TallyResult
 from .candidateHistory import CandidateHistory
+from .approval_request import ApprovalRequest
 
 __all__ = ['User', 'Election', 'Division', 'Candidate', 'Voter', 'VoteRecord',
            'Ballot', 'SpentToken', 'BallotCheckpoint', 'Terminal', 'AuditLog',
-           'TallyResult', 'CandidateHistory']
+           'TallyResult', 'CandidateHistory', 'ApprovalRequest']
