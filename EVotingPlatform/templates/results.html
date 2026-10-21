@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Results - E-Voting Platform{% endblock %}
 {% block content %}
+<!-- REQ-20: anyone can check that a ballot with this receipt code was recorded -->
+<div class="card mb-4"><div class="card-body">
+    <h5 class="card-title">Check my receipt</h5>
+    <form id="receiptForm" class="row g-2">
+        <div class="col-md-5"><input class="form-control" id="receiptInput" placeholder="Receipt code, e.g. 3F9A1C0B7D2E4A68"
+            maxlength="16" required autocomplete="off"></div>
+        <div class="col-md-2"><button class="btn btn-outline-primary" type="submit">Check</button></div>
+    </form>
+    <div id="receiptResult" class="mt-2"></div>
+</div></div>
+
 <h2>Election results</h2>
 <div class="row g-3 mb-4">
     <div class="col-md-5"><select class="form-select" id="electionSelect"></select></div>
@@ -28,6 +39,22 @@ document.getElementById('loadBtn').addEventListener('click', async () => {
             s.elected.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${esc(c.party)}</td></tr>`).join('') +
             `</tbody></table></div>`).join('');
     } catch (err) { out.innerHTML = ''; showAlert(err.message, 'warning'); }
+});
+document.getElementById('receiptForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const out = document.getElementById('receiptResult');
+    const code = document.getElementById('receiptInput').value.trim();
+    try {
+        const r = await apiRequest('/receipts/' + encodeURIComponent(code));
+        out.innerHTML = r.valid
+            ? `<div class="alert alert-success mb-0">✅ A ballot with this receipt was recorded on ${esc(r.date)}
+               (election ${esc(r.election_id)}), and its signature is valid.<br>
+               <small class="text-break">Ballot hash <code>${esc(r.ballot_hash)}</code></small></div>`
+            : `<div class="alert alert-danger mb-0">⚠️ This receipt was found, but the stored ballot no longer
+               matches its signature. Please report this to the electoral commission.</div>`;
+    } catch (err) {
+        out.innerHTML = `<div class="alert alert-warning mb-0">${esc(err.message)}</div>`;
+    }
 });
 document.addEventListener('DOMContentLoaded', init);
 </script>

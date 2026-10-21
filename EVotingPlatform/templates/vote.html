@@ -48,6 +48,13 @@
         <h4>✅ Your ballot has been recorded</h4>
         <p class="mb-1">Receipt code (it does not show who you are or how you voted):</p>
         <h3><code id="receiptCode"></code></h3>
+        <!-- REQ-20: signed receipt details -->
+        <p class="small mb-1" id="receiptSigned"></p>
+        <p class="small text-muted text-break mb-2">Recorded on <span id="receiptDate"></span> ·
+            ballot hash <code id="receiptHash"></code></p>
+        <button class="btn btn-sm btn-outline-success" id="downloadReceipt">Download receipt</button>
+        <p class="small text-muted mt-2 mb-0">Keep this receipt. You can check it on the
+            <a href="/results">Results</a> page, and on the public bulletin board after voting closes.</p>
     </div>
 </div>
 {% endblock %}
@@ -135,9 +142,25 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
         document.getElementById('ballot-area').style.display = 'none';
         document.getElementById('setup-card').style.display = 'none';
         document.getElementById('receipt-card').style.display = '';
-        document.getElementById('receiptCode').textContent = r.receipt.receipt_code;
+        showReceipt(r.receipt);
     } catch (err) { showAlert(err.message, 'danger'); }
 });
+// REQ-20: show the signed receipt and let the voter keep a copy
+function showReceipt(receipt) {
+    document.getElementById('receiptCode').textContent = receipt.receipt_code;
+    document.getElementById('receiptDate').textContent = receipt.date || '';
+    document.getElementById('receiptHash').textContent = (receipt.ballot_hash || '').slice(0, 16) + '…';
+    document.getElementById('receiptSigned').innerHTML = receipt.signature
+        ? `<span class="text-success">Signed by the election authority</span> (key <code>${esc(receipt.key_id)}</code>)`
+        : '<span class="text-warning">This receipt could not be signed. Your vote was still recorded.</span>';
+    document.getElementById('downloadReceipt').onclick = () => {
+        const blob = new Blob([JSON.stringify(receipt, null, 2)], { type: 'application/json' });
+        const link = Object.assign(document.createElement('a'), {
+            href: URL.createObjectURL(blob), download: `ballot-receipt-${receipt.receipt_code}.json` });
+        link.click();
+        URL.revokeObjectURL(link.href);
+    };
+}
 document.addEventListener('DOMContentLoaded', init);
 </script>
 {% endblock %}
