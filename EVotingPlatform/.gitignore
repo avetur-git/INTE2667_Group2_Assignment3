@@ -7,5 +7,5 @@ data/*.db
 *.db
 .env
 .pytest_cache/
-.DS_Store
+.DS_Store 
 .env.example
