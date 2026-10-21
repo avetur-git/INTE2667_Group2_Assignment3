@@ -27,7 +27,7 @@ and services never need to change.
 | REQ-17 | Candidate management for delegates only, with change logging | `app/routes/candidates.py` (`roles_required(ROLE_DELEGATE)` and `log_action`). Add a change-history table | Delegate role only; actions logged, but no per-field history. |
 | REQ-18 | Dual authorisation for sensitive actions | Hook `authorise_action`, called in `exclude_candidate` | One delegate can exclude a candidate alone. |
 | REQ-19 | Overseas voting from verified missions and locations only | `app/security/mission_access.py` wraps hooks `verify_terminal` and `pre_cast` (see `docs/MISSION_ACCESS.md`); admin routes in `app/routes/missions.py`; table `missions` | Simulated and tested: mission allow-list, IP range (stands in for the VPN), device certificate fingerprint, simulated geo-IP, Australia-only for online and polling station sessions. Off unless `ENFORCE_MISSION_ACCESS` is set. Real VPN, certificate authority and geo-IP service are documented only. |
-| REQ-20 | Non-identifying digital receipt | Hook `issue_receipt` | A random receipt code stored on the ballot and shown to the voter. |
+| REQ-20 | Non-identifying digital receipt | Hook `issue_receipt` | **Implemented** in `app/security/receipts.py`: Ed25519-signed receipt (code, election, date, REQ-02 ballot hash), public lookup, verification key and post-close bulletin board. See `docs/REQ-20_RECEIPTS.md` |
 
 ## Hook signatures
 
