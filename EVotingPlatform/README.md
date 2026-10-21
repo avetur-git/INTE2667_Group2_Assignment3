@@ -40,7 +40,7 @@ app/
 templates/             Bootstrap pages: home, login, register, dashboard, vote, staff, results
 tests/                 counting and API tests (pytest)
 scripts/               simulate_election.py
-infra/                 placeholder for Infrastructure as Code (REQ-06, REQ-16)
+infra/                 Terraform: network, firewall rules, DB users (REQ-06, see infra/README.md)
 docs/SECURITY_HOOKS.md requirement-by-requirement map of where each solution goes
 ```
 
