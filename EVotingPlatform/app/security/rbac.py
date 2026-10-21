@@ -53,6 +53,7 @@ class P:
     RESULTS_DETAIL_READ = 'results:detail_read'
     RESULTS_EXPORT = 'results:export'
     TERMINAL_MANAGE = 'terminal:manage'
+    MISSION_MANAGE = 'mission:manage'
     STAFF_MANAGE = 'staff:manage'
     AUDIT_READ = 'audit:read'
 
@@ -90,6 +91,9 @@ ROLE_PERMISSIONS = {
         P.STAFF_MANAGE,
         P.AUDIT_READ,
         P.CANDIDATE_HISTORY_READ,
+        P.TERMINAL_MANAGE,
+        P.MISSION_MANAGE,
+        P.STAFF_MANAGE,
     }),
 }
 
