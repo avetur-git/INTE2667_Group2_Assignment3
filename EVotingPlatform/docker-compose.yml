@@ -9,12 +9,61 @@ services:
       - JWT_SECRET_KEY=change-me-before-real-use
       - DATABASE_URL=sqlite:////app/data/evoting.db
       - PORT=5000
+      # REQ-05: write-once audit archive. The app only gets the restricted
+      # users (writer: upload only, reader: read only), never the MinIO root.
+      - AUDIT_ARCHIVE_ENDPOINT=minio:9000
+      - AUDIT_ARCHIVE_BUCKET=audit-archive
+      - AUDIT_ARCHIVE_ACCESS_KEY=${AUDIT_ARCHIVE_ACCESS_KEY:-audit-writer}
+      - AUDIT_ARCHIVE_SECRET_KEY=${AUDIT_ARCHIVE_SECRET_KEY:-change-me-writer-secret}
+      - AUDIT_ARCHIVE_READER_ACCESS_KEY=${AUDIT_ARCHIVE_READER_ACCESS_KEY:-audit-reader}
+      - AUDIT_ARCHIVE_READER_SECRET_KEY=${AUDIT_ARCHIVE_READER_SECRET_KEY:-change-me-reader-secret}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    depends_on:
+      minio-setup:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # REQ-05: MinIO stands in for cloud WORM storage (S3 Object Lock). Built from
+  # source at a pinned release and commit - see docker/minio/Dockerfile.
+  minio:
+    build: ./docker/minio
+    image: evoting-minio:RELEASE.2025-10-15T17-29-55Z
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio-root}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-change-me-minio-root}
+    ports:
+      - "127.0.0.1:9100:9000"   # S3 API, local machine only
+      - "127.0.0.1:9091:9090"   # web console, local machine only
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  # One-off: creates the locked bucket and the writer/reader users, then exits.
+  # The only service besides MinIO itself that sees the root credentials.
+  minio-setup:
+    build: .
+    command: ["python", "scripts/setup_audit_archive.py"]
+    environment:
+      - AUDIT_ARCHIVE_ENDPOINT=minio:9000
+      - AUDIT_ARCHIVE_BUCKET=audit-archive
+      - AUDIT_ARCHIVE_DEFAULT_DAYS=1
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio-root}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-change-me-minio-root}
+      - AUDIT_ARCHIVE_ACCESS_KEY=${AUDIT_ARCHIVE_ACCESS_KEY:-audit-writer}
+      - AUDIT_ARCHIVE_SECRET_KEY=${AUDIT_ARCHIVE_SECRET_KEY:-change-me-writer-secret}
+      - AUDIT_ARCHIVE_READER_ACCESS_KEY=${AUDIT_ARCHIVE_READER_ACCESS_KEY:-audit-reader}
+      - AUDIT_ARCHIVE_READER_SECRET_KEY=${AUDIT_ARCHIVE_READER_SECRET_KEY:-change-me-reader-secret}
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  minio-data:
