@@ -4,13 +4,14 @@ from app.services.eligibility import check_eligibility
 from app.services.errors import ServiceError
 from app.services.voting import build_ballot_paper, cast_vote
 from app.utils import constants as C
-from app.utils.helpers import roles_required, get_request_meta
+from app.utils.helpers import get_request_meta
+from app.security.rbac import P, permission_required
 
 voting_bp = Blueprint('voting', __name__)
 
 
 @voting_bp.route('/ballot-paper', methods=['GET'])
-@roles_required(C.ROLE_VOTER)
+@permission_required(P.BALLOT_CAST)
 def ballot_paper(current_user):
     """The candidates this voter will see (their division for the House, their state for the Senate)."""
     election = Election.query.get(request.args.get('election_id', type=int))
@@ -25,7 +26,7 @@ def ballot_paper(current_user):
 
 
 @voting_bp.route('/cast', methods=['POST'])
-@roles_required(C.ROLE_VOTER)
+@permission_required(P.BALLOT_CAST)
 def cast(current_user):
     """Cast a ballot.
     Body: {election_id, channel, terminal_id (polling_station / diplomatic_mission only),

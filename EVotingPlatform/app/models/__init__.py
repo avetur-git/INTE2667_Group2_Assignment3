@@ -7,6 +7,8 @@ from .ballot import Ballot, SpentToken, BallotCheckpoint
 from .terminal import Terminal
 from .audit import AuditLog
 from .tally import TallyResult
+from .candidateHistory import CandidateHistory
 
 __all__ = ['User', 'Election', 'Division', 'Candidate', 'Voter', 'VoteRecord',
-           'Ballot', 'Terminal', 'AuditLog', 'TallyResult','SpentToken','BallotCheckpoint']
+           'Ballot', 'SpentToken', 'BallotCheckpoint', 'Terminal', 'AuditLog',
+           'TallyResult', 'CandidateHistory']

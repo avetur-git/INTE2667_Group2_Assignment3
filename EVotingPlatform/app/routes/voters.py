@@ -7,7 +7,8 @@ from app.models.voter import Voter
 from app.services.audit import log_action
 from app.services.eligibility import check_eligibility
 from app.utils import constants as C
-from app.utils.helpers import validate_required_fields, user_required, roles_required
+from app.utils.helpers import validate_required_fields
+from app.security.rbac import P, permission_required
 
 voters_bp = Blueprint('voters', __name__)
 
@@ -45,7 +46,7 @@ def _parse_voter_fields(data):
 # ----------------------------- the voter themselves --------------------------
 
 @voters_bp.route('/me', methods=['GET'])
-@user_required
+@permission_required(P.OWN_ENROLMENT_READ)
 def my_enrolment(current_user):
     """Check my own enrolment status."""
     voter = current_user.voter
@@ -56,7 +57,7 @@ def my_enrolment(current_user):
 
 
 @voters_bp.route('/enrol', methods=['POST'])
-@roles_required(C.ROLE_VOTER)
+@permission_required(P.OWN_ENROLMENT_WRITE)
 def self_enrol(current_user):
     """A citizen enrols themselves. The record is 'pending' until an AEC officer approves it."""
     if current_user.voter:
@@ -72,7 +73,7 @@ def self_enrol(current_user):
 
 
 @voters_bp.route('/me/address', methods=['PUT'])
-@roles_required(C.ROLE_VOTER)
+@permission_required(P.OWN_ENROLMENT_WRITE)
 def update_address(current_user):
     """An enrolled voter updates their address (and division)."""
     voter = current_user.voter
@@ -92,7 +93,7 @@ def update_address(current_user):
 
 
 @voters_bp.route('/eligibility', methods=['GET'])
-@user_required
+@permission_required(P.OWN_ENROLMENT_READ)
 def my_eligibility(current_user):
     """Before voting: am I eligible to vote in this election?"""
     election = Election.query.get(request.args.get('election_id', type=int))
@@ -105,7 +106,7 @@ def my_eligibility(current_user):
 # ----------------------------- AEC officers ---------------------------------
 
 @voters_bp.route('/', methods=['POST'])
-@roles_required(C.ROLE_AEC_OFFICER, C.ROLE_ADMIN)
+@permission_required(P.VOTER_REGISTER)
 def register_citizen(current_user):
     """An AEC employee registers a citizen. Optionally creates their login too."""
     data = request.get_json(silent=True) or {}
@@ -134,7 +135,7 @@ def register_citizen(current_user):
 
 
 @voters_bp.route('/', methods=['GET'])
-@roles_required(C.ROLE_AEC_OFFICER, C.ROLE_ADMIN)
+@permission_required(P.VOTER_READ)
 def list_voters(current_user):
     q = Voter.query
     status = request.args.get('status')
@@ -159,12 +160,12 @@ def _set_status(voter_id, status, action, current_user):
 
 
 @voters_bp.route('/<int:voter_id>/approve', methods=['PUT'])
-@roles_required(C.ROLE_AEC_OFFICER, C.ROLE_ADMIN)
+@permission_required(P.VOTER_STATUS_CHANGE)
 def approve_voter(current_user, voter_id):
     return _set_status(voter_id, C.ENROLMENT_ENROLLED, 'VOTER_APPROVED', current_user)
 
 
 @voters_bp.route('/<int:voter_id>/remove', methods=['PUT'])
-@roles_required(C.ROLE_AEC_OFFICER, C.ROLE_ADMIN)
+@permission_required(P.VOTER_STATUS_CHANGE)
 def remove_voter(current_user, voter_id):
     return _set_status(voter_id, C.ENROLMENT_REMOVED, 'VOTER_REMOVED', current_user)
