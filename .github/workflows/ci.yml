@@ -72,9 +72,7 @@ jobs:
   dependency-audit:
     name: Dependency audit (pip-audit)
     runs-on: ubuntu-latest
-    # Report-only until the pinned dependencies with known CVEs are upgraded.
-    # Remove this line to make vulnerable dependencies block merges.
-    continue-on-error: true
+    # Fails the pipeline if any pinned dependency has a known vulnerability.
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -94,7 +92,7 @@ jobs:
   docker-build:
     name: Docker image build
     runs-on: ubuntu-latest
-    needs: [tests, sast]
+    needs: [tests, sast, dependency-audit]
     steps:
       - uses: actions/checkout@v4
       - name: Build image
