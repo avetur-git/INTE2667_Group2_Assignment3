@@ -3,20 +3,21 @@ from app import db
 from app.models.terminal import Terminal
 from app.services.audit import log_action
 from app.utils import constants as C
-from app.utils.helpers import validate_required_fields, roles_required, utcnow
+from app.utils.helpers import validate_required_fields, utcnow
+from app.security.rbac import P, permission_required
 
 terminals_bp = Blueprint('terminals', __name__)
 
 
 @terminals_bp.route('/', methods=['GET'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.TERMINAL_MANAGE)
 def list_terminals(current_user):
     terminals = Terminal.query.order_by(Terminal.terminal_id).all()
     return jsonify({'terminals': [t.to_dict() for t in terminals], 'total': len(terminals)}), C.HTTP_OK
 
 
 @terminals_bp.route('/', methods=['POST'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.TERMINAL_MANAGE)
 def register_terminal(current_user):
     data = request.get_json(silent=True)
     ok, error = validate_required_fields(data, ['terminal_id', 'channel', 'location_name'])
@@ -38,7 +39,7 @@ def register_terminal(current_user):
 
 
 @terminals_bp.route('/<terminal_id>/deactivate', methods=['PUT'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.TERMINAL_MANAGE)
 def deactivate_terminal(current_user, terminal_id):
     terminal = Terminal.query.filter_by(terminal_id=terminal_id).first()
     if not terminal:

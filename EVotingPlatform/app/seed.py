@@ -21,7 +21,7 @@ def seed_demo(election_status=C.ELECTION_OPEN, house_per_division=4,
         return {'message': 'Demo data already present'}
 
     for username, role in [('admin', C.ROLE_ADMIN), ('officer', C.ROLE_AEC_OFFICER),
-                           ('delegate', C.ROLE_DELEGATE)]:
+                           ('delegate', C.ROLE_DELEGATE), ('delegate2', C.ROLE_DELEGATE)]:
         db.session.add(User(username, f'{username}@example.test', DEMO_PASSWORD, role))
 
     divisions = []

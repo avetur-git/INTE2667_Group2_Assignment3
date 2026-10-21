@@ -18,7 +18,7 @@ and services never need to change.
 | REQ-08 | 99.9% availability, failover, paper fallback | Infrastructure (second region, health checks). `/health` and `POST /api/terminals/<id>/heartbeat` already exist | Single instance. |
 | REQ-09 | Scale from 7,000 to 40,000 terminals | Infrastructure (autoscaling) and the database (see limitations). `scripts/simulate_election.py` is a starting point for load tests | Single process, SQLite. |
 | REQ-10 | MFA for privileged users | Hook `verify_mfa`, called in `app/routes/auth.py` `login()` for staff roles | **Implemented** in `app/security/webauthn_mfa.py` (WebAuthn security keys). Enforced only when `MFA_REQUIRED=true` (off for now). See `docs/REQ-10_WEBAUTHN.md`. |
-| REQ-11 | Role-based access control | `roles_required` in `app/utils/helpers.py` (every protected route uses it) and the `users.role` column | A plain role-name check. |
+| REQ-11 | Role-based access control | `app/security/rbac.py`: one role-to-permission table (`ROLE_PERMISSIONS`) and the `permission_required(P.X)` decorator on every protected route. Tests in `tests/test_rbac.py` | **Implemented.** Deny by default, role read from the database on every request, refusals logged as `ACCESS_DENIED`. New routes must use `permission_required`, or be added to the public list in `tests/test_rbac.py` |
 | REQ-12 | Real-time eligibility against the authoritative roll | Hook `lookup_electoral_roll`, called in `app/services/eligibility.py` | Reads the local `voters` table. |
 | REQ-13 | One ballot per voter, across all channels | Hooks `has_already_voted` and `pre_cast`. Table: `vote_records` | A plain check then insert (not atomic). Add a unique constraint on `(voter_id, election_id)` or a central register. |
 | REQ-14 | Encrypt data at rest and in transit | Hooks `protect_data` / `unprotect_data` (used by `ballot_store`), database and disk encryption and TLS in infrastructure | No encryption. Plain HTTP. |
@@ -26,7 +26,7 @@ and services never need to change.
 | REQ-16 | Tested rollback within 15 minutes | CI/CD pipeline and `infra/` (outside the app code) | Nothing. |
 | REQ-17 | Candidate management for delegates only, with change logging | `app/routes/candidates.py` (`roles_required(ROLE_DELEGATE)` and `log_action`). Add a change-history table | Delegate role only; actions logged, but no per-field history. |
 | REQ-18 | Dual authorisation for sensitive actions | Hook `authorise_action`, called in `exclude_candidate` | One delegate can exclude a candidate alone. |
-| REQ-19 | Overseas voting from verified missions and locations only | Hook `verify_terminal` (receives `request_meta` with the caller's IP). Channel rules are in `app/services/voting.py` | Overseas voters must use the diplomatic mission channel and a registered `DM-` terminal, but nothing proves where the request came from. |
+| REQ-19 | Overseas voting from verified missions and locations only | `app/security/mission_access.py` wraps hooks `verify_terminal` and `pre_cast` (see `docs/MISSION_ACCESS.md`); admin routes in `app/routes/missions.py`; table `missions` | Simulated and tested: mission allow-list, IP range (stands in for the VPN), device certificate fingerprint, simulated geo-IP, Australia-only for online and polling station sessions. Off unless `ENFORCE_MISSION_ACCESS` is set. Real VPN, certificate authority and geo-IP service are documented only. |
 | REQ-20 | Non-identifying digital receipt | Hook `issue_receipt` | A random receipt code stored on the ballot and shown to the voter. |
 
 ## Hook signatures

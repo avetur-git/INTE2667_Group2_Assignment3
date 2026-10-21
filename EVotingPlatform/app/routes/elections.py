@@ -8,7 +8,8 @@ from app.services.audit import log_action
 from app.services.errors import ServiceError
 from app.services.tallying import tally_election
 from app.utils import constants as C
-from app.utils.helpers import validate_required_fields, roles_required
+from app.utils.helpers import validate_required_fields
+from app.security.rbac import P, permission_required
 
 elections_bp = Blueprint('elections', __name__)
 
@@ -35,7 +36,7 @@ def list_elections():
 
 
 @elections_bp.route('/', methods=['POST'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.ELECTION_MANAGE)
 def create_election(current_user):
     data = request.get_json(silent=True)
     ok, error = validate_required_fields(data, ['name', 'election_date'])
@@ -62,7 +63,7 @@ def get_election(election_id):
 
 
 @elections_bp.route('/<int:election_id>/status', methods=['PUT'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.ELECTION_MANAGE)
 def set_status(current_user, election_id):
     """Open or close an election - an election configuration change (REQ-04, REQ-06)."""
     election = Election.query.get(election_id)
@@ -80,7 +81,7 @@ def set_status(current_user, election_id):
 
 
 @elections_bp.route('/<int:election_id>/turnout', methods=['GET'])
-@roles_required(C.ROLE_ADMIN, C.ROLE_AEC_OFFICER)
+@permission_required(P.TURNOUT_READ)
 def turnout(current_user, election_id):
     """How many people have voted, by channel. Never shows how anyone voted."""
     election = Election.query.get(election_id)
@@ -95,7 +96,7 @@ def turnout(current_user, election_id):
 
 
 @elections_bp.route('/<int:election_id>/tally', methods=['POST'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.ELECTION_TALLY)
 def tally(current_user, election_id):
     """Compute results (can be re-run, for example after a court-ordered exclusion)."""
     election = Election.query.get(election_id)

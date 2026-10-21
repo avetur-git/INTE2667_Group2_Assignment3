@@ -4,13 +4,14 @@ from app.models.audit import AuditLog
 from app.models.user import User
 from app.services.audit import log_action
 from app.utils import constants as C
-from app.utils.helpers import validate_required_fields, roles_required
+from app.utils.helpers import validate_required_fields
+from app.security.rbac import P, permission_required
 
 admin_bp = Blueprint('admin', __name__)
 
 
 @admin_bp.route('/users', methods=['POST'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.STAFF_MANAGE)
 def create_staff_user(current_user):
     """Create a staff account (AEC officer, Commissioner's delegate, or admin)."""
     data = request.get_json(silent=True)
@@ -31,7 +32,7 @@ def create_staff_user(current_user):
 
 
 @admin_bp.route('/audit-logs', methods=['GET'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.AUDIT_READ)
 def audit_logs(current_user):
     q = AuditLog.query
     if request.args.get('action'):

@@ -58,7 +58,7 @@ def create_app(test_config=None):
 
     # Register blueprints
     from app.routes import (main_bp, auth_bp, voters_bp, elections_bp, candidates_bp,
-                            voting_bp, terminals_bp, results_bp, admin_bp)
+                            voting_bp, terminals_bp, results_bp, admin_bp, approvals_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(voters_bp, url_prefix='/api/voters')
@@ -68,8 +68,13 @@ def create_app(test_config=None):
     app.register_blueprint(terminals_bp, url_prefix='/api/terminals')
     app.register_blueprint(results_bp, url_prefix='/api/results')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    app.register_blueprint(approvals_bp, url_prefix='/api')
     from app.routes.webauthn import webauthn_bp
     app.register_blueprint(webauthn_bp, url_prefix='/api/auth/webauthn')
+
+    # REQ-19: diplomatic mission allow-list and location checks
+    from app.security.mission_access import init_app as init_mission_access
+    init_mission_access(app)
 
     @app.errorhandler(404)
     def not_found(e):
@@ -81,5 +86,9 @@ def create_app(test_config=None):
 
     from app.cli import register_cli
     register_cli(app)
+
+    # REQ-02: hash every ballot when it is stored
+    from app.security.ballot_chain import register_ballot_chain
+    register_ballot_chain()
 
     return app

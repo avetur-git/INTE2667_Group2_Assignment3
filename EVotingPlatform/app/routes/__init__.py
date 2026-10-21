@@ -8,6 +8,7 @@ from .voting import voting_bp
 from .terminals import terminals_bp
 from .results import results_bp
 from .admin import admin_bp
+from .approvals import approvals_bp
 
 __all__ = ['main_bp', 'auth_bp', 'voters_bp', 'elections_bp', 'candidates_bp',
-           'voting_bp', 'terminals_bp', 'results_bp', 'admin_bp']
+           'voting_bp', 'terminals_bp', 'results_bp', 'admin_bp', 'approvals_bp']

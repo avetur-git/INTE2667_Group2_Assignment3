@@ -1,8 +1,8 @@
-"""REQ-01: signing key for ballot tokens.
+"""REQ-01 / REQ-02: signing keys.
 
-The voter system signs tokens with the private key. The ballot system only needs
-the public key to check them. The key is a file in instance/ (git-ignored) that
-simulates an HSM or KMS."""
+token_key  - the voter system signs one-time ballot tokens (REQ-01).
+ledger_key - signs ballot hash-chain checkpoints (REQ-02).
+Both are files in instance/ (git-ignored) that simulate an HSM or KMS."""
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
@@ -12,8 +12,8 @@ from flask import current_app
 _cache = {}
 
 
-def token_private_key():
-    path = Path(current_app.instance_path) / 'token_key.pem'
+def _private_key(name):
+    path = Path(current_app.instance_path) / f'{name}.pem'
     if path not in _cache:
         if path.exists():
             key = serialization.load_pem_private_key(path.read_bytes(), password=None)
@@ -28,5 +28,17 @@ def token_private_key():
     return _cache[path]
 
 
+def token_private_key():
+    return _private_key('token_key')
+
+
 def token_public_key():
     return token_private_key().public_key()
+
+
+def ledger_private_key():
+    return _private_key('ledger_key')
+
+
+def ledger_public_key():
+    return ledger_private_key().public_key()

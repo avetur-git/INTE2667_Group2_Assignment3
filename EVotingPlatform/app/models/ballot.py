@@ -9,6 +9,7 @@ class Ballot(db.Model):
     user id, session id, channel or terminal id, and only the date, never the time."""
     __tablename__ = 'ballots'
     __bind_key__ = 'ballots'
+    __table_args__ = (db.UniqueConstraint('election_id', 'seq', name='uq_ballot_election_seq'),)
 
     id = db.Column(db.Integer, primary_key=True)
     ballot_uid = db.Column(db.String(36), unique=True, nullable=False)
@@ -24,6 +25,8 @@ class Ballot(db.Model):
 
     receipt_code = db.Column(db.String(32), unique=True, nullable=False)
     ballot_hash = db.Column(db.String(128), nullable=True)   # filled by REQ-02 hook
+    seq = db.Column(db.Integer, nullable=True)            # REQ-02: position in this election's chain
+    prev_hash = db.Column(db.String(64), nullable=True)   # REQ-02: hash of the previous ballot
     cast_date = db.Column(db.Date, default=lambda: utcnow().date())
 
 
@@ -35,3 +38,16 @@ class SpentToken(db.Model):
     __bind_key__ = 'ballots'
 
     nonce = db.Column(db.String(32), primary_key=True)
+
+
+
+class BallotCheckpoint(db.Model):
+    """REQ-02: a signed record of the chain head, saved every few ballots."""
+    __tablename__ = 'ballot_checkpoints'
+    __bind_key__ = 'ballots'
+
+    id = db.Column(db.Integer, primary_key=True)
+    election_id = db.Column(db.Integer, nullable=False, index=True)
+    seq = db.Column(db.Integer, nullable=False)
+    head_hash = db.Column(db.String(64), nullable=False)
+    signature = db.Column(db.String(128), nullable=False)
