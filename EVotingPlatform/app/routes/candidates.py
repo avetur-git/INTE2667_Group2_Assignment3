@@ -7,7 +7,7 @@ from app.models.election import Election, Division
 from app.security.hooks import hooks
 from app.services.audit import log_action
 from app.utils import constants as C
-from app.utils.helpers import validate_required_fields, roles_required
+from app.utils.helpers import validate_required_fields
 from app.services.candidate_history import record_change, diff_fields
 from app.security.rbac import P, permission_required
 
@@ -127,7 +127,7 @@ def exclude_candidate(current_user, candidate_id):
                     'candidate': cand.to_dict()}), C.HTTP_OK
 
 @candidates_bp.route('/<int:candidate_id>/history', methods=['GET'])
-@roles_required(C.ROLE_DELEGATE, C.ROLE_ADMIN)
+@permission_required(P.CANDIDATE_MANAGE)
 def get_candidate_history(current_user, candidate_id):
     """Every change ever made to one candidate, oldest first (REQ-17)."""
     cand = Candidate.query.get(candidate_id)
