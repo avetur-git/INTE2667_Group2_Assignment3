@@ -1,0 +1,125 @@
+# REQ-06: automated policy checks for the Infrastructure as Code in
+# EVotingPlatform/infra (firewall rules, network, database users).
+#
+# Runs on every pull request to main, not only ones that touch infra/, so the
+# checks below can be marked "required" in the branch protection rules without
+# leaving unrelated PRs waiting for a check that never starts.
+name: IaC
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iac-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TERRAFORM_VERSION: "1.9.8"
+  TFSEC_VERSION: "1.28.14"
+  # sha256 of tfsec_${TFSEC_VERSION}_linux_amd64.tar.gz from the release's checksums file.
+  TFSEC_SHA256: "329ae7f67f2f1813ebe08de498719ea7003c75d3ca24bb0b038369062508008e"
+  INFRA_DIR: EVotingPlatform/infra
+
+jobs:
+  terraform:
+    name: Terraform format and validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.INFRA_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff
+      - name: Init (no backend, no credentials)
+        run: terraform init -backend=false -input=false
+      - name: Validate
+        run: terraform validate
+
+  config-scan:
+    name: IaC security scan (tfsec)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tfsec
+        run: |
+          curl -sSLo tfsec.tar.gz "https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VERSION}/tfsec_${TFSEC_VERSION}_linux_amd64.tar.gz"
+          echo "${TFSEC_SHA256}  tfsec.tar.gz" | sha256sum --check
+          tar -xzf tfsec.tar.gz tfsec
+          sudo install tfsec /usr/local/bin/tfsec
+          tfsec --version
+
+      # A finding can only be silenced with an inline #tfsec:ignore comment.
+      # Each one must carry a written justification, and the platform owner
+      # sees it in review because infra/ is covered by CODEOWNERS.
+      - name: Inline exceptions must be justified
+        run: |
+          unjustified=$(grep -rn --include='*.tf' 'tfsec:ignore' "$INFRA_DIR" | grep -v 'Reviewed exception' || true)
+          if [ -n "$unjustified" ]; then
+            echo "::error::tfsec:ignore without a 'Reviewed exception (...)' justification:"
+            echo "$unjustified"
+            exit 1
+          fi
+          {
+            echo "### Reviewed exceptions in ${INFRA_DIR}"
+            echo '```'
+            grep -rn --include='*.tf' 'tfsec:ignore' "$INFRA_DIR" || echo "none"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Full report (all severities, including exceptions)
+        run: |
+          tfsec "$INFRA_DIR" --soft-fail --include-ignored --no-color \
+            --format markdown,json --out tfsec-report > /dev/null
+          cat tfsec-report.markdown >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail on high or critical findings
+        run: tfsec "$INFRA_DIR" --minimum-severity HIGH --no-color
+
+      - name: Upload tfsec report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfsec-report
+          path: tfsec-report.*
+
+  scanner-self-test:
+    name: IaC scanner self-test
+    runs-on: ubuntu-latest
+    # Proves the gate works: the known-bad fixture (database port open to the
+    # internet, public unencrypted database) must be rejected with the
+    # expected findings. Guards against a tfsec upgrade or flag change that
+    # silently stops catching them.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tfsec
+        run: |
+          curl -sSLo tfsec.tar.gz "https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VERSION}/tfsec_${TFSEC_VERSION}_linux_amd64.tar.gz"
+          echo "${TFSEC_SHA256}  tfsec.tar.gz" | sha256sum --check
+          tar -xzf tfsec.tar.gz tfsec
+          sudo install tfsec /usr/local/bin/tfsec
+      - name: Insecure fixture must fail the gate
+        run: |
+          set +e
+          tfsec EVotingPlatform/tests/iac/insecure --minimum-severity HIGH --no-color --format json > self-test.json
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "::error::tfsec passed a configuration with the database open to the internet"
+            exit 1
+          fi
+          for check in aws-ec2-no-public-ingress-sgr aws-rds-no-public-db-access aws-rds-encrypt-instance-storage-data; do
+            jq -e --arg c "$check" '.results | any(.long_id == $c)' self-test.json > /dev/null \
+              || { echo "::error::expected finding $check was not reported"; exit 1; }
+            echo "caught: $check"
+          done
