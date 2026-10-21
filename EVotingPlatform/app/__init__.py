@@ -58,9 +58,7 @@ def create_app(test_config=None):
     app.register_blueprint(results_bp, url_prefix='/api/results')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
 
-    # REQ-19: diplomatic mission allow-list and location checks
-    from app.security.mission_access import init_app as init_mission_access
-    init_mission_access(app)
+    
 
     @app.errorhandler(404)
     def not_found(e):
