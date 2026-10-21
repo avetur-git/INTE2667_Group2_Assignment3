@@ -1,0 +1,52 @@
+name: Rollback drill
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'  # every Monday at 03:00 UTC
+
+jobs:
+  rollback-drill:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create temporary Git drill repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rollback-drill/infra
+          cd /tmp/rollback-drill
+          git init
+          git config user.name "Ops Bot"
+          git config user.email "ops@example.test"
+          printf 'ALLOW_443=true\n' > infra/security.conf
+          git add .
+          git commit -m "Initial infra config"
+          printf 'ALLOW_22=true\n# bad change\n' > infra/security.conf
+          git add .
+          git commit -m "Bad firewall change"
+
+      - name: Run rollback drill
+        shell: bash
+        run: |
+          set -euo pipefail
+          python EVotingPlatform/infra/rollback.py \
+            --repo /tmp/rollback-drill \
+            --redeploy-command "python -c \"print('redeploy ok')\"" \
+            --health-check-command "python -c \"print('healthy')\"" \
+            --max-duration-seconds 900
+
+      - name: Confirm expected state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat /tmp/rollback-drill/infra/security.conf)" = "ALLOW_443=true"
