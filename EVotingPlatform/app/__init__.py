@@ -71,6 +71,8 @@ def create_app(test_config=None):
     app.register_blueprint(approvals_bp, url_prefix='/api')
     from app.routes.webauthn import webauthn_bp
     app.register_blueprint(webauthn_bp, url_prefix='/api/auth/webauthn')
+    from app.routes.receipts import receipts_bp
+    app.register_blueprint(receipts_bp, url_prefix='/api')
 
     # REQ-19: diplomatic mission allow-list and location checks
     from app.security.mission_access import init_app as init_mission_access
@@ -94,5 +96,9 @@ def create_app(test_config=None):
     # REQ-02: hash every ballot when it is stored
     from app.security.ballot_chain import register_ballot_chain
     register_ballot_chain()
+
+    # REQ-20: signed, non-identifying receipts (needs the REQ-02 ballot hash)
+    from app.security.receipts import register_signed_receipts
+    register_signed_receipts()
 
     return app

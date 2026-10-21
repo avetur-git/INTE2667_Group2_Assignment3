@@ -63,6 +63,8 @@ PUBLIC_ENDPOINTS = {
     # token exists; each checks the password (and enrolment code) itself
     'main.mfa_enrol_page', 'webauthn.register_begin', 'webauthn.register_finish',
     'webauthn.login_begin',
+    # REQ-20: anyone can check a receipt; nothing returned identifies a voter
+    'receipts.public_key', 'receipts.lookup_receipt', 'receipts.bulletin_board',
 }
 LOGIN_ONLY_ENDPOINTS = {'auth.get_profile', 'auth.logout'}
 

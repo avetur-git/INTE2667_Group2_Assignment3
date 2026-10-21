@@ -41,6 +41,18 @@ class SpentToken(db.Model):
 
 
 
+class ReceiptSignature(db.Model):
+    """REQ-20: the signature issued with a ballot's receipt. Stored (not recomputed)
+    so a later change to the ballot's hash makes the signature check fail.
+    Holds no voter, session or time information - only the receipt code."""
+    __tablename__ = 'receipt_signatures'
+    __bind_key__ = 'ballots'
+
+    receipt_code = db.Column(db.String(32), primary_key=True)
+    signature = db.Column(db.String(128), nullable=False)   # Ed25519, hex
+    key_id = db.Column(db.String(16), nullable=False)
+
+
 class BallotCheckpoint(db.Model):
     """REQ-02: a signed record of the chain head, saved every few ballots."""
     __tablename__ = 'ballot_checkpoints'
