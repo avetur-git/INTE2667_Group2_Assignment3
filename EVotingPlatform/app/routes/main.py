@@ -18,6 +18,12 @@ def register_page():
     return render_template('register.html')
 
 
+@main_bp.route('/mfa/enrol')
+def mfa_enrol_page():
+    """REQ-10: staff register a security key with their enrolment code."""
+    return render_template('mfa_enrol.html')
+
+
 @main_bp.route('/dashboard')
 def dashboard():
     """Voter dashboard: enrolment status, address update, link to vote."""

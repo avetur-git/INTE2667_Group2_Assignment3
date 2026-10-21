@@ -14,20 +14,28 @@
                     <div class="d-grid"><button type="submit" class="btn btn-success" id="loginBtn">Login</button></div>
                 </form>
             </div>
-            <div class="card-footer text-center"><small class="text-muted">No account? <a href="/register">Create one</a></small></div>
+            <div class="card-footer text-center"><small class="text-muted">No account? <a href="/register">Create one</a>
+                · Staff: <a href="/mfa/enrol">register a security key</a></small></div>
         </div>
     </div>
 </div>
 {% endblock %}
 {% block scripts %}
+<script src="/static/js/webauthn.js"></script>
 <script>
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('loginBtn'); btn.disabled = true;
     try {
         const f = new FormData(e.target);
-        const result = await apiRequest('/auth/login', { method: 'POST',
-            body: JSON.stringify({ username: f.get('username'), password: f.get('password') }) });
+        const body = { username: f.get('username'), password: f.get('password') };
+        // REQ-10: staff must also sign a one-time challenge with their security key
+        const begin = await apiRequest('/auth/webauthn/login/begin', { method: 'POST', body: JSON.stringify(body) });
+        if (begin.mfa_required) {
+            showAlert('Use your security key to finish logging in.', 'info');
+            body.webauthn = await getAssertion(begin.options);
+        }
+        const result = await apiRequest('/auth/login', { method: 'POST', body: JSON.stringify(body) });
         saveLogin(result);
         window.location.href = result.user.role === 'voter' ? '/dashboard' : '/staff';
     } catch (err) { showAlert(err.message, 'danger'); }
