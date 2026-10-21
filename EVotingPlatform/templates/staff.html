@@ -47,7 +47,11 @@
         <div class="col-md-1"><button class="btn btn-success w-100">Add</button></div>
       </form>
       <div id="candidateList" class="table-responsive"></div>
-          <div id="historyPanel" class="mt-3"></div>
+      <div class="mt-4">
+        <h6>Pending approval requests</h6>
+        <div id="approvalRequestList" class="table-responsive"></div>
+      </div>
+      <div id="historyPanel" class="mt-3"></div>
     </div></div>
   </div>
 
@@ -192,13 +196,39 @@ async function loadCandidates() {
         <td>${esc(c.contest_type === 'house' ? 'Div ' + c.division_id : c.state)}</td><td>${esc(c.name)}</td><td>${esc(c.party)}</td>
         <td>${esc(c.contest_type === 'house' ? c.ballot_position : (c.group_code + '-' + c.group_order))}</td>
         <td>${candidateActions(c)}</td></tr>`).join('') + '</tbody></table>';
+await loadApprovalRequests();
 }
 function candidateActions(c) {
-    const history = `<button class="btn btn-sm btn-outline-secondary" onclick="viewHistory(${c.id})">History</button>`;
-    if (c.is_excluded) return '<span class="badge bg-danger me-1">Excluded</span> ' + history;
-    if (currentRole !== 'commissioner_delegate') return history;
-    return `<button class="btn btn-sm btn-outline-primary" onclick="editCandidate(${c.id})">Edit</button>
-            <button class="btn btn-sm btn-outline-danger" onclick="excludeCandidate(${c.id})">Exclude</button> ` + history;
+const history = `<button class="btn btn-sm btn-outline-secondary" onclick="viewHistory(${c.id})">History</button>`;
+if (c.is_excluded) return '<span class="badge bg-danger me-1">Excluded</span> ' + history;
+if (currentRole !== 'commissioner_delegate') return history;
+return `<button class="btn btn-sm btn-outline-primary" onclick="editCandidate(${c.id})">Edit</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="excludeCandidate(${c.id})">Exclude</button> ` + history;
+}
+async function loadApprovalRequests() {
+try {
+    const r = await apiRequest('/approval-requests?status=pending');
+    const rows = r.requests && r.requests.length ? r.requests.map(req => `
+        <tr>
+          <td>${req.id}</td>
+          <td>${esc(req.target)}</td>
+          <td>${esc(req.reason)}</td>
+          <td>${esc(req.requested_by_username)}</td>
+          <td><button class="btn btn-sm btn-success" onclick="approveRequest(${req.id})">Approve</button>
+              <button class="btn btn-sm btn-outline-danger" onclick="rejectRequest(${req.id})">Reject</button></td>
+        </tr>`).join('') : '<tr><td colspan="5" class="text-muted">No pending approvals.</td></tr>';
+    document.getElementById('approvalRequestList')?.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>Target</th><th>Reason</th><th>Requested by</th><th>Action</th></tr></thead><tbody>' + rows + '</tbody></table>';
+} catch (err) { console.warn(err); }
+}
+async function approveRequest(id) {
+try { const r = await post(`/approval-requests/${id}/approve`, {}); showAlert('Approval accepted', 'success'); await loadCandidates(); }
+catch (err) { showAlert(err.message, 'danger'); }
+}
+async function rejectRequest(id) {
+const reason = prompt('Reason for rejection');
+if (!reason) return;
+try { await post(`/approval-requests/${id}/reject`, { reason }); showAlert('Approval rejected', 'success'); await loadCandidates(); }
+catch (err) { showAlert(err.message, 'danger'); }
 }
 async function editCandidate(id) {
     const c = lastCandidates.find(x => x.id === id); if (!c) return;
