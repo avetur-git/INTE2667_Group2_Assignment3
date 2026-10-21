@@ -10,6 +10,14 @@ def login(client, username, password=DEMO_PASSWORD):
     assert r.status_code == 200, r.get_json()
     return {'Authorization': f"Bearer {r.get_json()['access_token']}"}
 
+def exclude_with_approval(client, candidate_id, reason, requester='delegate', approver='delegate2'):
+    """REQ-18: exclusion is two steps. One delegate asks, a different delegate approves.
+    Returns the approval response (200 means the candidate is now excluded)."""
+    asked = client.post(f'/api/candidates/{candidate_id}/exclude', json={'reason': reason},
+                        headers=login(client, requester))
+    assert asked.status_code == 200, asked.get_json()
+    return client.post(f"/api/approval-requests/{asked.get_json()['request_id']}/approve",
+                       json={}, headers=login(client, approver))
 
 def full_vote(client, headers, election_id, channel='online', terminal_id=None):
     paper = client.get(f'/api/voting/ballot-paper?election_id={election_id}', headers=headers).get_json()
@@ -149,8 +157,7 @@ def test_exclusion_and_recount(client, app):
                        headers=delegate).status_code == 409
     client.put(f'/api/elections/{eid}/status', json={'status': 'closed'}, headers=admin)
     client.post(f'/api/elections/{eid}/tally', headers=admin)
-    assert client.post(f'/api/candidates/{cand.id}/exclude', json={'reason': 'Court order 123'},
-                       headers=delegate).status_code == 200
+    assert exclude_with_approval(client, cand.id, 'Court order 123').status_code == 200
     assert client.post(f'/api/elections/{eid}/tally', headers=admin).status_code == 200
     assert AuditLog.query.filter_by(action='CANDIDATE_EXCLUDED').count() == 1
 

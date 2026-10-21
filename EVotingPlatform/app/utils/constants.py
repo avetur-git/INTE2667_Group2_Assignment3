@@ -8,6 +8,14 @@ ROLE_ADMIN = 'election_admin'                     # elections, terminals, tally,
 ALL_ROLES = [ROLE_VOTER, ROLE_AEC_OFFICER, ROLE_DELEGATE, ROLE_ADMIN]
 PRIVILEGED_ROLES = [ROLE_AEC_OFFICER, ROLE_DELEGATE, ROLE_ADMIN]
 
+# Sensitive actions that require maker-checker authorisation before execution.
+SENSITIVE_ACTIONS = {
+    'EXCLUDE_CANDIDATE': 'candidate exclusion',
+    'OPEN_ELECTION': 'opening an election',
+    'CLOSE_ELECTION': 'closing an election',
+}
+APPROVAL_REQUEST_TIMEOUT_HOURS = 24
+
 # ---------------------------------------------------------------------------
 # Voting channels (from the systems description)
 # ---------------------------------------------------------------------------

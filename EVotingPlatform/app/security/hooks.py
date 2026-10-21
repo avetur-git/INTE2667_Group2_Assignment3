@@ -59,7 +59,12 @@ hooks = HookRegistry()
 
 def default_verify_mfa(user, request_data):
     """REQ-10 - second login factor for privileged users.
-    Base: no second factor. Return True to allow login, False to refuse."""
+
+    FAKE STUB FOR THE PROTOTYPE: the real MFA implementation is still pending and
+    this hook intentionally returns True so approval-flow tests can exercise the
+    rule logic before the FIDO2 hardware-key workstream is installed.
+    Replace this with the real MFA check when REQ-10 is implemented.
+    """
     return True
 
 

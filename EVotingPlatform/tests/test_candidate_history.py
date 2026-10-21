@@ -4,7 +4,7 @@ from app import db
 from app.models import Candidate, CandidateHistory, AuditLog, User
 from app.seed import seed_demo
 from app.utils import constants as C
-from tests.test_api_flow import login
+from tests.test_api_flow import login, exclude_with_approval
 
 REFUSED_USERS = ['voter1', 'officer', 'admin']
 
@@ -78,9 +78,7 @@ def test_only_delegate_can_exclude_candidate(client, app):
     eid = seed_demo(election_status=C.ELECTION_DRAFT)['election_id']
     cand_id = first_house_candidate().id
     open_and_close_election(client, eid)
-    r = client.post(f'/api/candidates/{cand_id}/exclude', json={'reason': 'Court order 123'},
-                    headers=login(client, 'delegate'))
-    assert r.status_code == 200
+    assert exclude_with_approval(client, cand_id, 'Court order 123').status_code == 200
     db.session.expire_all()
     assert db.session.get(Candidate, cand_id).is_excluded is True
 
@@ -172,8 +170,7 @@ def test_exclusion_creates_history_entry(client, app):
     cand_id = first_house_candidate().id
     open_and_close_election(client, eid)
 
-    client.post(f'/api/candidates/{cand_id}/exclude', json={'reason': 'Court order 123'},
-                headers=login(client, 'delegate'))
+    exclude_with_approval(client, cand_id, 'Court order 123')
 
     entries = history_for(cand_id)
     assert [e.action for e in entries] == ['excluded']
@@ -251,12 +248,12 @@ def test_candidate_change_written_to_audit_log(client, app):
                       headers=delegate).get_json()['candidate']['id']
     client.put(f'/api/candidates/{cid}', json={'party': 'Another Party'}, headers=delegate)
     open_and_close_election(client, eid)
-    client.post(f'/api/candidates/{cid}/exclude', json={'reason': 'Court order 7'}, headers=delegate)
+    exclude_with_approval(client, cid, 'Court order 7')
 
     logs = AuditLog.query.filter_by(object_type='candidate', object_id=str(cid)).order_by(AuditLog.id).all()
     assert [l.action for l in logs] == ['CANDIDATE_ADDED', 'CANDIDATE_UPDATED', 'CANDIDATE_EXCLUDED']
-    assert all(l.username == 'delegate' and l.success for l in logs)
-
+    assert [l.username for l in logs] == ['delegate', 'delegate', 'delegate2']
+    assert all(l.success for l in logs)
 
 # ---------------------------------------------------------------------------
 # History endpoint
@@ -271,7 +268,7 @@ def test_history_endpoint(client, app):
     client.put(f'/api/candidates/{cid}', headers=delegate, json={'ballot_position': 2, 'party': 'P'})
     client.put(f'/api/candidates/{cid}', headers=delegate, json={'party': 'Q'})
     open_and_close_election(client, eid)
-    client.post(f'/api/candidates/{cid}/exclude', headers=delegate, json={'reason': 'Court order 9'})
+    exclude_with_approval(client, cid, 'Court order 9')
 
     r = client.get(f'/api/candidates/{cid}/history', headers=login(client, 'admin'))
     assert r.status_code == 200
