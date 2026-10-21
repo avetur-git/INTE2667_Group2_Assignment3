@@ -36,11 +36,19 @@ def create_staff_user(current_user):
 @permission_required(P.AUDIT_READ)
 @audited('AUDIT_LOG_VIEWED', object_type='audit_log')
 def audit_logs(current_user):
-    audit.details.update({k: request.args[k] for k in ('action', 'username', 'limit') if k in request.args})
+    """Newest first. Filters: action, username, success (true/false),
+    hide_views (true leaves out *_VIEWED read entries), limit (1-500)."""
+    filters = ('action', 'username', 'success', 'hide_views', 'limit')
+    audit.details.update({k: request.args[k] for k in filters if k in request.args})
     q = AuditLog.query
     if request.args.get('action'):
         q = q.filter_by(action=request.args['action'])
     if request.args.get('username'):
         q = q.filter_by(username=request.args['username'])
-    logs = q.order_by(AuditLog.id.desc()).limit(request.args.get('limit', 100, type=int)).all()
+    if request.args.get('success') in ('true', 'false'):
+        q = q.filter_by(success=request.args['success'] == 'true')
+    if request.args.get('hide_views') == 'true':
+        q = q.filter(~AuditLog.action.like('%\\_VIEWED', escape='\\'))
+    limit = min(max(request.args.get('limit', 100, type=int), 1), 500)
+    logs = q.order_by(AuditLog.id.desc()).limit(limit).all()
     return jsonify({'logs': [l.to_dict() for l in logs], 'total': len(logs)}), C.HTTP_OK

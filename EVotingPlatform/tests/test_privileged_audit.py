@@ -216,6 +216,42 @@ def test_approvals_alias_works(client, admin):
     assert len(entries('APPROVAL_REQUESTS_VIEWED')) == 1
 
 
+def _audit_log(client, admin, query=''):
+    r = client.get(f'/api/admin/audit-logs{query}', headers=admin)
+    assert r.status_code == 200
+    return r.get_json()['logs']
+
+
+def test_audit_log_api_returns_all_fields(client, admin):
+    client.put('/api/elections/9999/status', json={'status': 'open'}, headers=admin)
+    [entry] = _audit_log(client, admin, '?action=ELECTION_STATUS_CHANGED')
+    for field in ('user_id', 'username', 'action', 'object_type', 'object_id', 'created_at',
+                  'ip_address', 'user_agent', 'session_id', 'success', 'details'):
+        assert field in entry
+    assert entry['details']['error'] == 'Election not found'
+
+
+def test_audit_log_filters_failures(client, admin):
+    client.put('/api/elections/9999/status', json={'status': 'open'}, headers=admin)
+    logs = _audit_log(client, admin, '?success=false')
+    assert logs and all(l['success'] is False for l in logs)
+    assert any(l['action'] == 'ELECTION_STATUS_CHANGED' for l in logs)
+
+
+def test_audit_log_can_hide_view_entries(client, admin):
+    client.get('/api/terminals/', headers=admin)
+    assert any(l['action'].endswith('_VIEWED') for l in _audit_log(client, admin))
+    assert not any(l['action'].endswith('_VIEWED') for l in _audit_log(client, admin, '?hide_views=true'))
+
+
+def test_audit_log_limit_is_capped(client, admin):
+    from app.services.audit import log_action
+    for i in range(510):
+        log_action('BULK_TEST', object_type='test', object_id=i)
+    assert len(_audit_log(client, admin, '?limit=100000')) == 500
+    assert len(_audit_log(client, admin, '?limit=0')) == 1
+
+
 def test_every_privileged_route_is_audited(app):
     assert unaudited_privileged_routes(app) == []
 
