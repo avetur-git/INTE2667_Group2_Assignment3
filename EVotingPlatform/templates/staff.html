@@ -232,7 +232,7 @@ try {
 } catch (err) { console.warn(err); }
 }
 async function approveRequest(id) {
-try { const r = await post(`/approval-requests/${id}/approve`, {}); showAlert('Approval accepted', 'success'); await loadCandidates(); }
+try { const r = await post(`/approval-requests/${id}/approve`, {}); showAlert('Approved: the candidate is now excluded. Re-run the tally to recount.', 'success'); await loadCandidates(); }
 catch (err) { showAlert(err.message, 'danger'); }
 }
 async function rejectRequest(id) {
@@ -282,7 +282,8 @@ document.getElementById('candidateForm').addEventListener('submit', async (e) =>
 });
 async function excludeCandidate(id) {
     const reason = prompt('Reason / court order reference for excluding this candidate:'); if (!reason) return;
-    try { await post(`/candidates/${id}/exclude`, { reason }); showAlert('Candidate excluded. Re-run the tally to recount.', 'success'); loadCandidates(); }
+    // REQ-18: this only creates a pending request; a second delegate must approve it
+    try { const r = await post(`/candidates/${id}/exclude`, { reason }); showAlert(r.message, 'info'); loadCandidates(); }
     catch (err) { showAlert(err.message, 'danger'); }
 }
 

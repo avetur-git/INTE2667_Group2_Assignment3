@@ -1,6 +1,7 @@
 from datetime import timedelta
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
+from flask_jwt_extended import get_jwt
 
 from app import db
 from app.models.approval_request import ApprovalRequest
@@ -132,14 +133,14 @@ def approve_approval_request(current_user, request_id):
         db.session.commit()
         return jsonify({'error': 'This approval request has expired'}), C.HTTP_CONFLICT
 
-    # REQ-10: placeholder MFA gate. Replace this implementation with the real FIDO2
-    # hardware-key check when the MFA workstream is implemented. This fake version
-    # is intentionally permissive so the approval workflow can be tested before the
-    # real second-factor mechanism lands.
-    if not hooks.run('verify_mfa', current_user, {'action': 'approve_approval_request', 'request_id': request_id}):
+    # REQ-10: the approver's security key was checked when they logged in, and
+    # the token says so. When MFA is enforced, a token without that proof (for
+    # example one issued before MFA was switched on) cannot approve.
+    if current_app.config.get('MFA_REQUIRED') and not get_jwt().get('mfa'):
         audit.action = 'APPROVAL_REQUEST_MFA_FAILED'
-        audit.details['request_id'] = req.id
-        return jsonify({'error': 'MFA verification failed; request remains pending'}), C.HTTP_UNAUTHORIZED
+        audit.details.update({'request_id': req.id, 'reason': 'session_not_mfa_verified'})
+        return jsonify({'error': 'Log in again with your security key to approve; request remains pending'}), \
+            C.HTTP_UNAUTHORIZED
 
     if req.action == 'EXCLUDE_CANDIDATE':
         cand = Candidate.query.get(req.target_id)

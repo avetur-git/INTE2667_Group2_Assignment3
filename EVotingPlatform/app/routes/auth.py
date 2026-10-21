@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, current_app, request, jsonify
 from flask_jwt_extended import create_access_token
 from app import db
 from app.models.user import User
@@ -64,9 +64,14 @@ def login():
             log_action('MFA_FAILED', user=user, success=False)
             return jsonify({'error': 'Second authentication factor failed'}), C.HTTP_UNAUTHORIZED
 
-        token = create_access_token(identity=str(user.id))
+        # The token records that the security key was checked, so later
+        # sensitive steps (REQ-18 approvals) can rely on this login.
+        mfa_verified = user.is_privileged and bool(current_app.config.get('MFA_REQUIRED'))
+        token = create_access_token(identity=str(user.id),
+                                    additional_claims={'mfa': True} if mfa_verified else None)
         if user.is_privileged:
-            log_action('PRIVILEGED_LOGIN', user=user, object_type='user', object_id=user.id)
+            log_action('PRIVILEGED_LOGIN', user=user, object_type='user', object_id=user.id,
+                       details={'mfa': mfa_verified})
         return jsonify({'message': 'Login successful', 'user': user.to_dict(),
                         'access_token': token}), C.HTTP_OK
     except Exception as e:

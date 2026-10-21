@@ -2,8 +2,10 @@ import pytest
 
 from app import db
 from app.models import Candidate, ApprovalRequest, AuditLog
-from app.security.hooks import hooks
-from app.seed import seed_demo
+from app.security.webauthn_mfa import issue_enrolment_code
+from app.models import User
+from app.seed import seed_demo, DEMO_PASSWORD
+from tests.virtual_authenticator import VirtualAuthenticator
 from app.utils import constants as C
 from tests.test_api_flow import login
 
@@ -86,15 +88,13 @@ def test_approval_requires_mfa_check(client, app):
     created = client.post(f'/api/candidates/{candidate_id}/exclude', json={'reason': 'Court order 102'}, headers=login(client, 'delegate'))
     request_id = created.get_json()['request_id']
 
+    # REQ-10: delegate2 logged in without a security key (MFA was off), so once
+    # MFA is enforced their session cannot approve
     delegate2 = login(client, 'delegate2')
-    original = hooks.get('verify_mfa')
-    hooks.register('verify_mfa', lambda user, request_data: False)
-    try:
-        response = client.post(f'/api/approval-requests/{request_id}/approve', json={}, headers=delegate2)
-        assert response.status_code == 401
-        assert db.session.get(ApprovalRequest, request_id).status == 'pending'
-    finally:
-        hooks.register('verify_mfa', original)
+    app.config['MFA_REQUIRED'] = True
+    response = client.post(f'/api/approval-requests/{request_id}/approve', json={}, headers=delegate2)
+    assert response.status_code == 401
+    assert db.session.get(ApprovalRequest, request_id).status == 'pending'
 
 
 def test_failed_mfa_leaves_request_pending(client, app):
@@ -105,15 +105,59 @@ def test_failed_mfa_leaves_request_pending(client, app):
     created = client.post(f'/api/candidates/{candidate_id}/exclude', json={'reason': 'Court order 103'}, headers=login(client, 'delegate'))
     request_id = created.get_json()['request_id']
     delegate2 = login(client, 'delegate2')
-    original = hooks.get('verify_mfa')
-    hooks.register('verify_mfa', lambda user, request_data: False)
-    try:
-        resp = client.post(f'/api/approval-requests/{request_id}/approve', json={}, headers=delegate2)
-        assert resp.status_code == 401
-    finally:
-        hooks.register('verify_mfa', original)
+    app.config['MFA_REQUIRED'] = True
+    resp = client.post(f'/api/approval-requests/{request_id}/approve', json={}, headers=delegate2)
+    assert resp.status_code == 401
     assert db.session.get(ApprovalRequest, request_id).status == 'pending'
     assert db.session.get(Candidate, candidate_id).is_excluded is False
+
+
+def _login_with_security_key(client, username, key):
+    """REQ-10 login: password, then the key signs the server's challenge."""
+    creds = {'username': username, 'password': DEMO_PASSWORD}
+    begin = client.post('/api/auth/webauthn/login/begin', json=creds).get_json()
+    r = client.post('/api/auth/login', json={**creds, 'webauthn': key.get(begin['options'])})
+    assert r.status_code == 200, r.get_json()
+    return {'Authorization': f"Bearer {r.get_json()['access_token']}"}
+
+
+def test_approval_succeeds_after_security_key_login(client, app):
+    eid = seed_demo(election_status=C.ELECTION_DRAFT)['election_id']
+    candidate_id = first_candidate_id()
+    open_and_close_election(client, eid)
+    created = client.post(f'/api/candidates/{candidate_id}/exclude', json={'reason': 'Court order 104'}, headers=login(client, 'delegate'))
+    request_id = created.get_json()['request_id']
+
+    # delegate2 registers a key, then MFA is switched on
+    key = VirtualAuthenticator()
+    delegate2_user = User.query.filter_by(username='delegate2').one()
+    code = issue_enrolment_code(delegate2_user)
+    creds = {'username': 'delegate2', 'password': DEMO_PASSWORD, 'enrolment_code': code}
+    options = client.post('/api/auth/webauthn/register/begin', json=creds).get_json()['options']
+    assert client.post('/api/auth/webauthn/register/finish', json={**creds, 'credential': key.create(options)}).status_code == 201
+    app.config['MFA_REQUIRED'] = True
+
+    response = client.post(f'/api/approval-requests/{request_id}/approve', json={},
+                           headers=_login_with_security_key(client, 'delegate2', key))
+    assert response.status_code == 200
+    db.session.expire_all()
+    assert db.session.get(ApprovalRequest, request_id).status == 'approved'
+    assert db.session.get(Candidate, candidate_id).is_excluded is True
+    login_entry = AuditLog.query.filter_by(action='PRIVILEGED_LOGIN', username='delegate2').order_by(AuditLog.id.desc()).first()
+    assert login_entry.details == {'mfa': True}
+
+
+def test_mfa_failure_on_approval_is_audited(client, app):
+    eid = seed_demo(election_status=C.ELECTION_DRAFT)['election_id']
+    candidate_id = first_candidate_id()
+    open_and_close_election(client, eid)
+    created = client.post(f'/api/candidates/{candidate_id}/exclude', json={'reason': 'Court order 105'}, headers=login(client, 'delegate'))
+    request_id = created.get_json()['request_id']
+    delegate2 = login(client, 'delegate2')
+    app.config['MFA_REQUIRED'] = True
+    client.post(f'/api/approval-requests/{request_id}/approve', json={}, headers=delegate2)
+    entry = AuditLog.query.filter_by(action='APPROVAL_REQUEST_MFA_FAILED').one()
+    assert entry.success is False and entry.details['reason'] == 'session_not_mfa_verified'
 
 
 def test_non_delegate_cannot_request_or_approve(client, app):

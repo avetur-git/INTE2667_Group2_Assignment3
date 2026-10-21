@@ -55,6 +55,17 @@ transport usb). WebAuthn works on `http://localhost`. Any other host needs HTTPS
    `webauthn`. The `verify_mfa` hook checks it. A JWT is only issued if it passes, so
    no admin API can be reached with the password alone.
 
+When MFA is enforced, a staff token issued after a successful key check carries an
+`mfa: true` claim (and the `PRIVILEGED_LOGIN` audit entry records `mfa: true`).
+
+## Sensitive actions after login (REQ-18)
+
+Approving a dual-authorisation request does not ask for the key again. It relies on
+the approver's login: when `MFA_REQUIRED=true`, the approve route only accepts a
+token with the `mfa` claim. A token issued before MFA was switched on is refused
+(`APPROVAL_REQUEST_MFA_FAILED`, reason `session_not_mfa_verified`), and the request
+stays pending until the approver logs in again with their key.
+
 ## Tests
 
 `tests/test_webauthn_mfa.py` uses a software authenticator
@@ -71,3 +82,7 @@ unregistered key, cloned key counter, expired challenge, and the enrolment code 
   approved models. A real deployment could require attestation from an allow-list.
 - The enrolment code is printed on the server console. In production it would be
   delivered over a separate trusted channel.
+- The key check lasts as long as the login token (`JWT_EXPIRES_HOURS`, 8 hours by
+  default). A delegate who logged in with their key can approve requests for that
+  long without touching the key again. Asking for the key at each approval
+  ("step-up") would be stronger, but was not chosen for this prototype.
