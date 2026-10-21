@@ -127,7 +127,7 @@ def exclude_candidate(current_user, candidate_id):
                     'candidate': cand.to_dict()}), C.HTTP_OK
 
 @candidates_bp.route('/<int:candidate_id>/history', methods=['GET'])
-@permission_required(P.CANDIDATE_MANAGE)
+@permission_required(P.CANDIDATE_HISTORY_READ)
 def get_candidate_history(current_user, candidate_id):
     """Every change ever made to one candidate, oldest first (REQ-17)."""
     cand = Candidate.query.get(candidate_id)

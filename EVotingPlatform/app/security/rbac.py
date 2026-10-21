@@ -45,6 +45,7 @@ class P:
     # Candidates (Commissioner's delegates)
     CANDIDATE_MANAGE = 'candidate:manage'
     CANDIDATE_EXCLUDE = 'candidate:exclude'
+    CANDIDATE_HISTORY_READ = 'candidate:history_read'
 
     # Running the election (election admins)
     ELECTION_MANAGE = 'election:manage'
@@ -74,6 +75,7 @@ ROLE_PERMISSIONS = {
     C.ROLE_DELEGATE: frozenset({
         P.CANDIDATE_MANAGE,
         P.CANDIDATE_EXCLUDE,
+        P.CANDIDATE_HISTORY_READ,
     }),
     C.ROLE_ADMIN: frozenset({
         P.VOTER_REGISTER,
@@ -87,6 +89,7 @@ ROLE_PERMISSIONS = {
         P.TERMINAL_MANAGE,
         P.STAFF_MANAGE,
         P.AUDIT_READ,
+        P.CANDIDATE_HISTORY_READ,
     }),
 }
 
