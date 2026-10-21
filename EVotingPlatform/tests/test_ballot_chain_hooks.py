@@ -41,3 +41,52 @@ def test_checkpoint_is_saved_every_n_ballots(app, monkeypatch):
     for _ in range(4):
         _cast()
     assert [c.seq for c in BallotCheckpoint.query.order_by(BallotCheckpoint.seq)] == [2, 4]
+
+
+
+def _verify():
+    return hooks.run('verify_ballots', Ballot.query.all())
+
+
+def test_untouched_election_verifies(app):
+    for _ in range(3):
+        _cast()
+    assert _verify() == []
+
+
+def test_edited_ballot_is_flagged(app):
+    for _ in range(3):
+        _cast()
+    second = Ballot.query.filter_by(seq=2).first()
+    uid = second.ballot_uid
+    second.house_order = [2, 1]
+    db.session.commit()
+    assert uid in _verify()
+
+
+def test_deleted_ballot_is_flagged(app):
+    for _ in range(3):
+        _cast()
+    db.session.delete(Ballot.query.filter_by(seq=2).first())
+    db.session.commit()
+    third = Ballot.query.filter_by(seq=3).first()
+    assert third.ballot_uid in _verify()
+
+
+def test_deleted_last_ballot_is_caught_by_checkpoint(app, monkeypatch):
+    monkeypatch.setattr(ballot_chain, 'CHECKPOINT_EVERY', 2)
+    for _ in range(2):
+        _cast()
+    db.session.delete(Ballot.query.filter_by(seq=2).first())
+    db.session.commit()
+    assert 'MISSING:2' in _verify()
+
+
+def test_forged_checkpoint_is_flagged(app, monkeypatch):
+    monkeypatch.setattr(ballot_chain, 'CHECKPOINT_EVERY', 2)
+    for _ in range(2):
+        _cast()
+    checkpoint = BallotCheckpoint.query.first()
+    checkpoint.signature = '00' * 64
+    db.session.commit()
+    assert 'CHECKPOINT:2' in _verify()
