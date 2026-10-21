@@ -7,6 +7,8 @@ from .ballot import Ballot, SpentToken
 from .terminal import Terminal
 from .audit import AuditLog
 from .tally import TallyResult
+from .webauthn import WebAuthnCredential, WebAuthnChallenge, EnrolmentCode
 
 __all__ = ['User', 'Election', 'Division', 'Candidate', 'Voter', 'VoteRecord',
-           'Ballot', 'Terminal', 'AuditLog', 'TallyResult','SpentToken']
+           'Ballot', 'Terminal', 'AuditLog', 'TallyResult','SpentToken',
+           'WebAuthnCredential', 'WebAuthnChallenge', 'EnrolmentCode']
