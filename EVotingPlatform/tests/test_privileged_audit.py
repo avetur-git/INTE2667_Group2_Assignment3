@@ -96,6 +96,55 @@ def test_refused_request_logged_once_as_access_denied(client, app):
     assert entries('ELECTION_CREATED') == []
 
 
+def _closed_election_candidate(client, admin):
+    from app.models import Candidate
+    election = Election.query.first()
+    client.put(f'/api/elections/{election.id}/status', json={'status': 'closed'}, headers=admin)
+    return Candidate.query.filter_by(election_id=election.id).first()
+
+
+def test_exclusion_request_recorded_on_the_approval_request(client, admin):
+    cand = _closed_election_candidate(client, admin)
+    r = client.post(f'/api/candidates/{cand.id}/exclude', json={'reason': 'Court order 1'},
+                    headers=login(client, 'delegate'))
+    assert r.status_code == 200
+    [entry] = entries('APPROVAL_REQUEST_CREATED')
+    assert (entry.object_type, entry.object_id) == ('approval_request', str(r.get_json()['request_id']))
+    assert entry.details['target'] == f'Candidate {cand.name}' and entry.success is True
+    assert entries('CANDIDATE_EXCLUSION_REQUESTED') == []
+
+
+def test_refused_exclusion_recorded_as_failure(client, admin):
+    from app.security.hooks import hooks
+    cand = _closed_election_candidate(client, admin)
+    hooks.register('authorise_action', lambda *args: (False, 'Second approver required'))
+    try:
+        r = client.post(f'/api/candidates/{cand.id}/exclude', json={'reason': 'Court order 2'},
+                        headers=login(client, 'delegate'))
+    finally:
+        hooks.reset('authorise_action')
+    assert r.status_code == 403
+    [entry] = entries('CANDIDATE_EXCLUSION_REFUSED')
+    assert (entry.object_type, entry.object_id) == ('candidate', str(cand.id))
+    assert entry.success is False
+    assert entry.details['message'] == 'Second approver required'
+
+
+def test_candidate_history_view_audited(client, app):
+    from app.models import Candidate
+    seed_demo()
+    cand = Candidate.query.first()
+    client.get(f'/api/candidates/{cand.id}/history', headers=login(client, 'delegate'))
+    [entry] = entries('CANDIDATE_HISTORY_VIEWED')
+    assert (entry.username, entry.object_id, entry.success) == ('delegate', str(cand.id), True)
+
+
+def test_mission_list_view_audited(client, admin):
+    client.get('/api/missions/', headers=admin)
+    [entry] = entries('MISSIONS_VIEWED')
+    assert entry.username == 'admin' and entry.object_type == 'mission' and entry.success is True
+
+
 def test_voter_actions_are_not_privileged(app):
     # Voter routes (enrol, cast a ballot...) are not required to use @audited
     assert not any('/api/voting/' in r or '/api/voters/me' in r

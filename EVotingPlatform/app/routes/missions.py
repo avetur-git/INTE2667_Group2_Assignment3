@@ -5,9 +5,9 @@ from app import db
 from app.models.mission import Mission
 from app.models.terminal import Terminal
 from app.security.mission_access import FINGERPRINT_RE, normalise_fingerprint
-from app.services.audit import log_action
 from app.utils import constants as C
 from app.security.rbac import P, permission_required
+from app.security.audit_trail import audit, audited
 from app.utils.helpers import utcnow, validate_required_fields
 
 missions_bp = Blueprint('missions', __name__)
@@ -51,6 +51,7 @@ def _parse(data):
 
 @missions_bp.route('/', methods=['GET'])
 @permission_required(P.MISSION_MANAGE)
+@audited('MISSIONS_VIEWED', object_type='mission')
 def list_missions(current_user):
     missions = Mission.query.order_by(Mission.name).all()
     return jsonify({'missions': [m.to_dict() for m in missions], 'total': len(missions)}), C.HTTP_OK
@@ -58,6 +59,7 @@ def list_missions(current_user):
 
 @missions_bp.route('/', methods=['POST'])
 @permission_required(P.MISSION_MANAGE)
+@audited('MISSION_CREATED', object_type='mission')
 def add_mission(current_user):
     clean, error = _parse(request.get_json(silent=True))
     if error:
@@ -67,14 +69,15 @@ def add_mission(current_user):
     mission = Mission(created_by=current_user.id, revoked_fingerprints=[], **clean)
     db.session.add(mission)
     db.session.commit()
-    log_action('MISSION_CREATED', user=current_user, object_type='mission', object_id=mission.id,
-               details={'name': mission.name, 'country': mission.country,
-                        'terminal_ids': mission.terminal_ids, 'allowed_cidrs': mission.allowed_cidrs})
+    audit.target(mission.id)
+    audit.details.update({'name': mission.name, 'country': mission.country,
+                          'terminal_ids': mission.terminal_ids, 'allowed_cidrs': mission.allowed_cidrs})
     return jsonify({'mission': mission.to_dict()}), C.HTTP_CREATED
 
 
 @missions_bp.route('/<int:mission_id>/deactivate', methods=['PUT'])
 @permission_required(P.MISSION_MANAGE)
+@audited('MISSION_DEACTIVATED', object_type='mission')
 def deactivate_mission(current_user, mission_id):
     """Stops voting from this mission straight away: the next session is refused."""
     mission = Mission.query.get(mission_id)
@@ -83,13 +86,13 @@ def deactivate_mission(current_user, mission_id):
     mission.is_active = False
     mission.deactivated_at = utcnow()
     db.session.commit()
-    log_action('MISSION_DEACTIVATED', user=current_user, object_type='mission', object_id=mission.id,
-               details={'name': mission.name})
+    audit.details['name'] = mission.name
     return jsonify({'mission': mission.to_dict()}), C.HTTP_OK
 
 
 @missions_bp.route('/<int:mission_id>/revoke-cert', methods=['POST'])
 @permission_required(P.MISSION_MANAGE)
+@audited('MISSION_CERT_REVOKED', object_type='mission')
 def revoke_certificate(current_user, mission_id):
     """Revoke one device certificate (for example a lost or stolen terminal)."""
     mission = Mission.query.get(mission_id)
@@ -104,6 +107,5 @@ def revoke_certificate(current_user, mission_id):
     mission.cert_fingerprints = [f for f in mission.cert_fingerprints if f != fingerprint]
     mission.revoked_fingerprints = list(mission.revoked_fingerprints or []) + [fingerprint]
     db.session.commit()
-    log_action('MISSION_CERT_REVOKED', user=current_user, object_type='mission', object_id=mission.id,
-               details={'name': mission.name, 'fingerprint': fingerprint})
+    audit.details.update({'name': mission.name, 'fingerprint': fingerprint})
     return jsonify({'mission': mission.to_dict()}), C.HTTP_OK

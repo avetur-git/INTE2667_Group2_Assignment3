@@ -8,11 +8,11 @@ from app.models.approval_request import ApprovalRequest
 from app.models.candidate import Candidate
 from app.models.election import Election, Division
 from app.security.hooks import hooks
-from app.services.audit import log_action
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields, utcnow
 from app.services.candidate_history import record_change, diff_fields
 from app.security.rbac import P, permission_required
+from app.security.audit_trail import audit, audited
 
 
 candidates_bp = Blueprint('candidates', __name__)
@@ -36,6 +36,7 @@ def list_candidates():
 
 @candidates_bp.route('/', methods=['POST'])
 @permission_required(P.CANDIDATE_MANAGE)
+@audited('CANDIDATE_ADDED', object_type='candidate')
 def add_candidate(current_user):
     """A Commissioner's delegate enters candidate details, including order within party group (REQ-17)."""
     data = request.get_json(silent=True)
@@ -70,12 +71,13 @@ def add_candidate(current_user):
     db.session.flush()   # gives the candidate an id
     record_change(cand, 'created', {'name': {'old': None, 'new': cand.name}}, current_user)
     db.session.commit()
-    log_action('CANDIDATE_ADDED', user=current_user, object_type='candidate', object_id=cand.id)
+    audit.target(cand.id)
     return jsonify({'candidate': cand.to_dict()}), C.HTTP_CREATED
 
 
 @candidates_bp.route('/<int:candidate_id>', methods=['PUT'])
 @permission_required(P.CANDIDATE_MANAGE)
+@audited('CANDIDATE_UPDATED', object_type='candidate')
 def update_candidate(current_user, candidate_id):
     """Edit name, party, group order or ballot position (draft elections only)."""
     cand = Candidate.query.get(candidate_id)
@@ -91,13 +93,13 @@ def update_candidate(current_user, candidate_id):
     if changes:
         record_change(cand, 'updated', changes, current_user)
     db.session.commit()
-    log_action('CANDIDATE_UPDATED', user=current_user, object_type='candidate', object_id=cand.id,
-               details={'fields': [f for f in data if f in ('name', 'party', 'group_code', 'group_order', 'ballot_position')]})
+    audit.details['fields'] = [f for f in data if f in ('name', 'party', 'group_code', 'group_order', 'ballot_position')]
     return jsonify({'candidate': cand.to_dict()}), C.HTTP_OK
 
 
 @candidates_bp.route('/<int:candidate_id>/exclude', methods=['POST'])
 @permission_required(P.CANDIDATE_EXCLUDE)
+@audited('CANDIDATE_EXCLUSION_REQUESTED', object_type='candidate')
 def exclude_candidate(current_user, candidate_id):
     """Exclude a candidate from the contest once voting has closed."""
     cand = Candidate.query.get(candidate_id)
@@ -115,8 +117,8 @@ def exclude_candidate(current_user, candidate_id):
 
     allowed, message = hooks.run('authorise_action', 'EXCLUDE_CANDIDATE', current_user, cand, data)
     if not allowed:
-        log_action('CANDIDATE_EXCLUSION_REFUSED', user=current_user, object_type='candidate',
-                  object_id=cand.id, success=False, details={'message': message})
+        audit.action = 'CANDIDATE_EXCLUSION_REFUSED'
+        audit.details['message'] = message
         return jsonify({'error': message or 'Authorisation required'}), C.HTTP_FORBIDDEN
 
     # REQ-18: exclusion never runs here. It creates a pending request that a
@@ -133,14 +135,17 @@ def exclude_candidate(current_user, candidate_id):
         expires_at=utcnow() + timedelta(hours=C.APPROVAL_REQUEST_TIMEOUT_HOURS))
     db.session.add(req)
     db.session.commit()
-    log_action('APPROVAL_REQUEST_CREATED', user=current_user, object_type='approval_request', object_id=req.id,
-               details={'action': 'EXCLUDE_CANDIDATE', 'target': req.target, 'reason': req.reason,
-                        'expires_at': req.expires_at.isoformat()})
+    # What this request created is an approval request, not an exclusion
+    audit.action = 'APPROVAL_REQUEST_CREATED'
+    audit.target(req.id, object_type='approval_request')
+    audit.details.update({'action': 'EXCLUDE_CANDIDATE', 'target': req.target, 'reason': req.reason,
+                          'expires_at': req.expires_at.isoformat()})
     return jsonify({'message': 'Exclusion submitted. A different delegate must approve it before it takes effect.',
                     'request_id': req.id, 'status': req.status}), C.HTTP_OK
 
 @candidates_bp.route('/<int:candidate_id>/history', methods=['GET'])
 @permission_required(P.CANDIDATE_HISTORY_READ)
+@audited('CANDIDATE_HISTORY_VIEWED', object_type='candidate')
 def get_candidate_history(current_user, candidate_id):
     """Every change ever made to one candidate, oldest first (REQ-17)."""
     cand = Candidate.query.get(candidate_id)
