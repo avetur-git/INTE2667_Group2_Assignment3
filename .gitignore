@@ -1,2 +1,9 @@
 # Local secrets - never commit
 .env
+
+# Terraform working files (the .terraform.lock.hcl provider lock IS committed)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+backend.hcl
