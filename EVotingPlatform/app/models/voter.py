@@ -50,9 +50,17 @@ class Voter(db.Model):
 
 class VoteRecord(db.Model):
     """Records THAT a voter has voted in an election - never WHAT they voted.
-    There is deliberately no link from this table to the ballots table.
-    (REQ-01 hardens this separation; REQ-13 hardens the one-vote rule.)"""
+    There is deliberately no link from this table to the ballots table (REQ-01).
+
+    REQ-13: this table is the single "has voted" register shared by every
+    channel (online, polling station, diplomatic mission). The unique
+    constraint below makes the database itself refuse a second row for the
+    same voter and election, so "check and mark as voted" is one atomic step:
+    two simultaneous attempts cannot both succeed."""
     __tablename__ = 'vote_records'
+    __table_args__ = (
+        db.UniqueConstraint('voter_id', 'election_id', name='uq_vote_records_voter_election'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     voter_id = db.Column(db.Integer, db.ForeignKey('voters.id'), nullable=False)
@@ -60,5 +68,3 @@ class VoteRecord(db.Model):
     channel = db.Column(db.String(20), nullable=False)
     terminal_id = db.Column(db.String(50), nullable=True)
     voted_at = db.Column(db.DateTime, default=utcnow)
-    # NOTE: no unique constraint on (voter_id, election_id) in the base build -
-    # duplicate prevention is a plain check in the hook 'has_already_voted' (REQ-13).

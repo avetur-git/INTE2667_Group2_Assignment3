@@ -1,3 +1,5 @@
+from sqlalchemy.exc import IntegrityError
+
 from app import db
 from app.models.candidate import Candidate
 from app.models.terminal import Terminal
@@ -48,6 +50,14 @@ def build_ballot_paper(voter, election):
     }
 
 
+def _refuse_duplicate(voter, election, channel, user):
+    """REQ-13: record the refused attempt (a possible fraud signal) and stop.
+    Logs which channel was tried, never anything about a ballot."""
+    log_action('DUPLICATE_VOTE_REFUSED', user=user, object_type='election',
+               object_id=election.id, success=False, details={'channel': channel})
+    raise ServiceError(C.ERROR_ALREADY_VOTED, 409, 'already_voted')
+
+
 def cast_vote(voter, election, payload, channel, terminal_id, user, request_meta):
     """Validate and record one ballot. Returns the receipt dict."""
     if election.status != C.ELECTION_OPEN:
@@ -74,7 +84,9 @@ def cast_vote(voter, election, payload, channel, terminal_id, user, request_meta
     # Eligibility (REQ-12 / REQ-13 plug in through hooks)
     eligible, code, message = check_eligibility(voter, election)
     if not eligible:
-        raise ServiceError(message, 409 if code == 'already_voted' else 403, code)
+        if code == 'already_voted':
+            _refuse_duplicate(voter, election, channel, user)
+        raise ServiceError(message, 403, code)
 
     ok, message = hooks.run('pre_cast', voter, election, channel, request_meta)
     if not ok:
@@ -89,10 +101,20 @@ def cast_vote(voter, election, payload, channel, terminal_id, user, request_meta
     senate_order, senate_source = validate_senate(payload.get('senate_atl'), payload.get('senate_btl'),
                                                   senate_candidates)
 
-    # Store: one record that the voter voted, one anonymous ballot, one commit.
+    # REQ-13: mark the voter as voted FIRST. The unique constraint on
+    # vote_records makes this an atomic check-and-mark: if another request
+    # (from any channel) already marked this voter, the database refuses
+    # here, before any token is issued or ballot stored.
     try:
         db.session.add(VoteRecord(voter_id=voter.id, election_id=election.id, channel=channel,
                                   terminal_id=terminal.terminal_id if terminal else None))
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        _refuse_duplicate(voter, election, channel, user)
+
+    # Store: one anonymous ballot, then one commit for both.
+    try:
         # REQ-01: the voter side hands over only a one-time token, never the voter's identity
         token = issue_token()
         ballot = ballot_store.save_ballot(
