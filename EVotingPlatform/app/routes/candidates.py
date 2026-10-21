@@ -99,11 +99,7 @@ def update_candidate(current_user, candidate_id):
 @candidates_bp.route('/<int:candidate_id>/exclude', methods=['POST'])
 @permission_required(P.CANDIDATE_EXCLUDE)
 def exclude_candidate(current_user, candidate_id):
-    """Create a maker-checker request for candidate exclusion.
-
-    The actual exclusion runs only after a second Commissioner's delegate has
-    approved the request, rather than immediately when the requester submits it.
-    """
+    """Exclude a candidate from the contest once voting has closed."""
     cand = Candidate.query.get(candidate_id)
     if not cand:
         return jsonify({'error': C.ERROR_CANDIDATE_NOT_FOUND}), C.HTTP_NOT_FOUND
@@ -115,29 +111,26 @@ def exclude_candidate(current_user, candidate_id):
     if not ok:
         return jsonify({'error': 'A reason (for example the court order reference) is required'}), 400
     if current_user.role != C.ROLE_DELEGATE:
-        return jsonify({'error': "Only Commissioner's delegates can request candidate exclusion"}), C.HTTP_FORBIDDEN
+        return jsonify({'error': "Only Commissioner's delegates can exclude candidates"}), C.HTTP_FORBIDDEN
 
     allowed, message = hooks.run('authorise_action', 'EXCLUDE_CANDIDATE', current_user, cand, data)
     if not allowed:
         log_action('CANDIDATE_EXCLUSION_REFUSED', user=current_user, object_type='candidate',
-                   object_id=cand.id, success=False, details={'message': message})
+                  object_id=cand.id, success=False, details={'message': message})
         return jsonify({'error': message or 'Authorisation required'}), C.HTTP_FORBIDDEN
 
-    req = ApprovalRequest(
-        action='EXCLUDE_CANDIDATE',
-        target_type='candidate',
-        target_id=str(cand.id),
-        target=f'candidate:{cand.id}',
-        reason=data['reason'][:255],
-        requested_by=current_user.id,
-        expires_at=utcnow() + timedelta(hours=C.APPROVAL_REQUEST_TIMEOUT_HOURS),
-    )
-    db.session.add(req)
+    original_reason = cand.excluded_reason
+    original_flag = cand.is_excluded
+    cand.is_excluded = True
+    cand.excluded_reason = data['reason'][:255]
+    record_change(cand, 'excluded', {
+        'is_excluded': {'old': original_flag, 'new': True},
+        'excluded_reason': {'old': original_reason, 'new': cand.excluded_reason},
+    }, current_user)
     db.session.commit()
-    log_action('APPROVAL_REQUEST_CREATED', user=current_user, object_type='approval_request', object_id=req.id,
-              details={'action': 'EXCLUDE_CANDIDATE', 'target_type': 'candidate', 'target_id': cand.id,
-                       'reason': req.reason, 'expires_at': req.expires_at.isoformat() if req.expires_at else None})
-    return jsonify({'message': 'Candidate exclusion submitted for approval', 'request_id': req.id, 'status': req.status}), C.HTTP_OK
+    log_action('CANDIDATE_EXCLUDED', user=current_user, object_type='candidate', object_id=cand.id,
+              details={'reason': cand.excluded_reason})
+    return jsonify({'candidate': cand.to_dict(), 'message': 'Candidate excluded'}), C.HTTP_OK
 
 @candidates_bp.route('/<int:candidate_id>/history', methods=['GET'])
 @permission_required(P.CANDIDATE_HISTORY_READ)
