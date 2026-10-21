@@ -63,11 +63,10 @@ def user_required(f):
 
 
 def roles_required(*roles):
-    """Require one of the given roles. Injects current_user.
+    """DEPRECATED - use app.security.rbac.permission_required instead (REQ-11).
 
-    BASE RBAC (REQ-11): a plain role-name check against users.role. The
-    central IAM/RBAC solution replaces the body of this decorator, so route
-    code does not need to change."""
+    Kept only so older branches still run. No route on main uses it: routes
+    ask for a permission, and app/security/rbac.py decides which roles hold it."""
     def wrapper(f):
         @wraps(f)
         @jwt_required()
