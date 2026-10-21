@@ -119,18 +119,25 @@ def exclude_candidate(current_user, candidate_id):
                   object_id=cand.id, success=False, details={'message': message})
         return jsonify({'error': message or 'Authorisation required'}), C.HTTP_FORBIDDEN
 
-    original_reason = cand.excluded_reason
-    original_flag = cand.is_excluded
-    cand.is_excluded = True
-    cand.excluded_reason = data['reason'][:255]
-    record_change(cand, 'excluded', {
-        'is_excluded': {'old': original_flag, 'new': True},
-        'excluded_reason': {'old': original_reason, 'new': cand.excluded_reason},
-    }, current_user)
+    # REQ-18: exclusion never runs here. It creates a pending request that a
+    # DIFFERENT delegate must approve (see app/routes/approvals.py).
+    pending = ApprovalRequest.query.filter_by(action='EXCLUDE_CANDIDATE', target_id=str(cand.id),
+                                              status='pending').first()
+    if pending and pending.expires_at > utcnow():
+        return jsonify({'error': 'An exclusion request for this candidate is already waiting for approval',
+                        'request_id': pending.id}), C.HTTP_CONFLICT
+    req = ApprovalRequest(
+        action='EXCLUDE_CANDIDATE', target_type='candidate', target_id=str(cand.id),
+        target=f'Candidate {cand.name}', reason=data['reason'][:255],
+        requested_by=current_user.id,
+        expires_at=utcnow() + timedelta(hours=C.APPROVAL_REQUEST_TIMEOUT_HOURS))
+    db.session.add(req)
     db.session.commit()
-    log_action('CANDIDATE_EXCLUDED', user=current_user, object_type='candidate', object_id=cand.id,
-              details={'reason': cand.excluded_reason})
-    return jsonify({'candidate': cand.to_dict(), 'message': 'Candidate excluded'}), C.HTTP_OK
+    log_action('APPROVAL_REQUEST_CREATED', user=current_user, object_type='approval_request', object_id=req.id,
+               details={'action': 'EXCLUDE_CANDIDATE', 'target': req.target, 'reason': req.reason,
+                        'expires_at': req.expires_at.isoformat()})
+    return jsonify({'message': 'Exclusion submitted. A different delegate must approve it before it takes effect.',
+                    'request_id': req.id, 'status': req.status}), C.HTTP_OK
 
 @candidates_bp.route('/<int:candidate_id>/history', methods=['GET'])
 @permission_required(P.CANDIDATE_HISTORY_READ)
