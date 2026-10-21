@@ -69,4 +69,8 @@ def create_app(test_config=None):
     from app.cli import register_cli
     register_cli(app)
 
+    # REQ-02: hash every ballot when it is stored
+    from app.security.ballot_chain import register_ballot_chain
+    register_ballot_chain()
+
     return app
