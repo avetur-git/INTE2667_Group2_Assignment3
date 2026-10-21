@@ -96,7 +96,10 @@ def default_verify_terminal(terminal, request_meta):
 
 def default_has_already_voted(voter, election):
     """REQ-13 - one ballot per voter across all channels.
-    Base: a plain read of vote_records (not atomic, per-database only)."""
+    A fast pre-check so voters get a clear answer early (for example before
+    the ballot paper is shown). It is NOT the guarantee: two requests can both
+    pass this read at the same moment. The guarantee is the unique constraint
+    on vote_records, enforced in cast_vote (app/services/voting.py)."""
     from app.models.voter import VoteRecord
     return VoteRecord.query.filter_by(voter_id=voter.id, election_id=election.id).first() is not None
 
