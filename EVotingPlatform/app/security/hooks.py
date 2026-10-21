@@ -38,6 +38,11 @@ class HookRegistry:
         for n in names:
             self._hooks[n] = self._defaults[n]
 
+    def get(self, name):
+        """The function currently registered for a hook. Lets a solution wrap the
+        existing check instead of replacing it (see app/security/mission_access.py)."""
+        return self._hooks[name]
+
     def run(self, name, *args, **kwargs):
         return self._hooks[name](*args, **kwargs)
 
@@ -54,7 +59,12 @@ hooks = HookRegistry()
 
 def default_verify_mfa(user, request_data):
     """REQ-10 - second login factor for privileged users.
-    Base: no second factor. Return True to allow login, False to refuse."""
+
+    FAKE STUB FOR THE PROTOTYPE: the real MFA implementation is still pending and
+    this hook intentionally returns True so approval-flow tests can exercise the
+    rule logic before the FIDO2 hardware-key workstream is installed.
+    Replace this with the real MFA check when REQ-10 is implemented.
+    """
     return True
 
 

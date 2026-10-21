@@ -1,12 +1,19 @@
 from flask import Blueprint, request, jsonify
+from datetime import timedelta
+
+from app.models.candidateHistory import CandidateHistory
+from app.models.user import User
 from app import db
+from app.models.approval_request import ApprovalRequest
 from app.models.candidate import Candidate
 from app.models.election import Election, Division
 from app.security.hooks import hooks
 from app.services.audit import log_action
 from app.utils import constants as C
-from app.utils.helpers import validate_required_fields
+from app.utils.helpers import validate_required_fields, utcnow
+from app.services.candidate_history import record_change, diff_fields
 from app.security.rbac import P, permission_required
+
 
 candidates_bp = Blueprint('candidates', __name__)
 
@@ -60,6 +67,8 @@ def add_candidate(current_user):
         return jsonify({'error': 'contest_type must be house or senate'}), 400
 
     db.session.add(cand)
+    db.session.flush()   # gives the candidate an id
+    record_change(cand, 'created', {'name': {'old': None, 'new': cand.name}}, current_user)
     db.session.commit()
     log_action('CANDIDATE_ADDED', user=current_user, object_type='candidate', object_id=cand.id)
     return jsonify({'candidate': cand.to_dict()}), C.HTTP_CREATED
@@ -76,9 +85,11 @@ def update_candidate(current_user, candidate_id):
     if election.status != C.ELECTION_DRAFT:
         return jsonify({'error': 'Candidates can only be edited while the election is in draft'}), C.HTTP_CONFLICT
     data = request.get_json(silent=True) or {}
-    for field in ('name', 'party', 'group_code', 'group_order', 'ballot_position'):
-        if field in data:
-            setattr(cand, field, data[field])
+    changes = diff_fields(cand, data)
+    for field, change in changes.items():
+        setattr(cand, field, change['new'])
+    if changes:
+        record_change(cand, 'updated', changes, current_user)
     db.session.commit()
     log_action('CANDIDATE_UPDATED', user=current_user, object_type='candidate', object_id=cand.id,
                details={'fields': [f for f in data if f in ('name', 'party', 'group_code', 'group_order', 'ballot_position')]})
@@ -88,8 +99,7 @@ def update_candidate(current_user, candidate_id):
 @candidates_bp.route('/<int:candidate_id>/exclude', methods=['POST'])
 @permission_required(P.CANDIDATE_EXCLUDE)
 def exclude_candidate(current_user, candidate_id):
-    """Exclude a candidate when the High Court (Court of Disputed Returns) orders a
-    recount. After excluding, re-run the tally. REQ-18 adds dual authorisation."""
+    """Exclude a candidate from the contest once voting has closed."""
     cand = Candidate.query.get(candidate_id)
     if not cand:
         return jsonify({'error': C.ERROR_CANDIDATE_NOT_FOUND}), C.HTTP_NOT_FOUND
@@ -100,17 +110,45 @@ def exclude_candidate(current_user, candidate_id):
     ok, error = validate_required_fields(data, ['reason'])
     if not ok:
         return jsonify({'error': 'A reason (for example the court order reference) is required'}), 400
+    if current_user.role != C.ROLE_DELEGATE:
+        return jsonify({'error': "Only Commissioner's delegates can exclude candidates"}), C.HTTP_FORBIDDEN
 
     allowed, message = hooks.run('authorise_action', 'EXCLUDE_CANDIDATE', current_user, cand, data)
     if not allowed:
         log_action('CANDIDATE_EXCLUSION_REFUSED', user=current_user, object_type='candidate',
-                   object_id=cand.id, success=False, details={'message': message})
+                  object_id=cand.id, success=False, details={'message': message})
         return jsonify({'error': message or 'Authorisation required'}), C.HTTP_FORBIDDEN
 
-    cand.is_excluded = True
-    cand.excluded_reason = data['reason'][:255]
+    # REQ-18: exclusion never runs here. It creates a pending request that a
+    # DIFFERENT delegate must approve (see app/routes/approvals.py).
+    pending = ApprovalRequest.query.filter_by(action='EXCLUDE_CANDIDATE', target_id=str(cand.id),
+                                              status='pending').first()
+    if pending and pending.expires_at > utcnow():
+        return jsonify({'error': 'An exclusion request for this candidate is already waiting for approval',
+                        'request_id': pending.id}), C.HTTP_CONFLICT
+    req = ApprovalRequest(
+        action='EXCLUDE_CANDIDATE', target_type='candidate', target_id=str(cand.id),
+        target=f'Candidate {cand.name}', reason=data['reason'][:255],
+        requested_by=current_user.id,
+        expires_at=utcnow() + timedelta(hours=C.APPROVAL_REQUEST_TIMEOUT_HOURS))
+    db.session.add(req)
     db.session.commit()
-    log_action('CANDIDATE_EXCLUDED', user=current_user, object_type='candidate', object_id=cand.id,
-               details={'reason': cand.excluded_reason})
-    return jsonify({'message': 'Candidate excluded. Re-run the tally to recount.',
-                    'candidate': cand.to_dict()}), C.HTTP_OK
+    log_action('APPROVAL_REQUEST_CREATED', user=current_user, object_type='approval_request', object_id=req.id,
+               details={'action': 'EXCLUDE_CANDIDATE', 'target': req.target, 'reason': req.reason,
+                        'expires_at': req.expires_at.isoformat()})
+    return jsonify({'message': 'Exclusion submitted. A different delegate must approve it before it takes effect.',
+                    'request_id': req.id, 'status': req.status}), C.HTTP_OK
+
+@candidates_bp.route('/<int:candidate_id>/history', methods=['GET'])
+@permission_required(P.CANDIDATE_HISTORY_READ)
+def get_candidate_history(current_user, candidate_id):
+    """Every change ever made to one candidate, oldest first (REQ-17)."""
+    cand = Candidate.query.get(candidate_id)
+    if not cand:
+        return jsonify({'error': C.ERROR_CANDIDATE_NOT_FOUND}), C.HTTP_NOT_FOUND
+    entries = (CandidateHistory.query.filter_by(candidate_id=candidate_id)
+               .order_by(CandidateHistory.version).all())
+    names = {u.id: u.username for u in User.query.filter(
+        User.id.in_({e.changed_by for e in entries})).all()} if entries else {}
+    history = [{**e.to_dict(), 'changed_by_username': names.get(e.changed_by)} for e in entries]
+    return jsonify({'candidate_id': candidate_id, 'history': history, 'total': len(history)}), C.HTTP_OK

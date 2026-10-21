@@ -36,4 +36,5 @@ class Candidate(db.Model):
             'group_order': self.group_order,
             'ballot_position': self.ballot_position,
             'is_excluded': self.is_excluded,
+            'excluded_reason': self.excluded_reason,
         }
