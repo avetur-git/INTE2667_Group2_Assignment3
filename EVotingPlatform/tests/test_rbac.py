@@ -43,6 +43,10 @@ PROTECTED = [
     ('GET',  '/api/terminals/',                            P.TERMINAL_MANAGE),
     ('POST', '/api/terminals/',                            P.TERMINAL_MANAGE),
     ('PUT',  '/api/terminals/NOPE/deactivate',             P.TERMINAL_MANAGE),
+    ('GET',  '/api/missions/',                             P.MISSION_MANAGE),
+    ('POST', '/api/missions/',                             P.MISSION_MANAGE),
+    ('PUT',  '/api/missions/9999/deactivate',              P.MISSION_MANAGE),
+    ('POST', '/api/missions/9999/revoke-cert',             P.MISSION_MANAGE),
     ('POST', '/api/admin/users',                           P.STAFF_MANAGE),
     ('GET',  '/api/admin/audit-logs',                      P.AUDIT_READ),
 ]
