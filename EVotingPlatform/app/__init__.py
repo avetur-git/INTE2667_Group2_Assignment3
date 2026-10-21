@@ -76,6 +76,10 @@ def create_app(test_config=None):
     from app.security.mission_access import init_app as init_mission_access
     init_mission_access(app)
 
+    # REQ-15: refuse to start if a privileged route is not audited
+    from app.security.audit_trail import check_privileged_routes_audited
+    check_privileged_routes_audited(app)
+
     @app.errorhandler(404)
     def not_found(e):
         return jsonify({'error': 'Not found'}), 404

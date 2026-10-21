@@ -77,13 +77,13 @@ def _current_context():
 audit = LocalProxy(_current_context)
 
 
-def audited(action, object_type):
+def audited(action, object_type, id_arg=None):
     """Audit a privileged route. `action` and `object_type` are required, so an
-    entry can never be written without them. If the route has a URL argument
-    named `<object_type>_id` it is used as the object id automatically."""
+    entry can never be written without them. The object id is taken from the
+    URL argument `id_arg` (default `<object_type>_id`) when the route has one."""
     if not action or not object_type:
         raise ValueError('@audited needs an action and an object_type')
-    id_arg = f'{object_type}_id'
+    id_arg = id_arg or f'{object_type}_id'
 
     def wrapper(f):
         @wraps(f)

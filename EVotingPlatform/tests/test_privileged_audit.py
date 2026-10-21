@@ -145,6 +145,81 @@ def test_mission_list_view_audited(client, admin):
     assert entry.username == 'admin' and entry.object_type == 'mission' and entry.success is True
 
 
+def _pending_exclusion(client, admin):
+    cand = _closed_election_candidate(client, admin)
+    r = client.post(f'/api/candidates/{cand.id}/exclude', json={'reason': 'Court order 3'},
+                    headers=login(client, 'delegate'))
+    return cand, r.get_json()['request_id']
+
+
+def _expire_all_requests():
+    from datetime import timedelta
+    from app.models import ApprovalRequest
+    from app.utils.helpers import utcnow
+    ApprovalRequest.query.update({'expires_at': utcnow() - timedelta(minutes=1)})
+    db.session.commit()
+
+
+def test_approval_records_approval_execution_and_exclusion(client, admin):
+    cand, request_id = _pending_exclusion(client, admin)
+    r = client.post(f'/api/approval-requests/{request_id}/approve', headers=login(client, 'delegate2'))
+    assert r.status_code == 200
+    db.session.expire_all()
+    trail = AuditLog.query.filter(AuditLog.action.in_(
+        ['APPROVAL_REQUEST_APPROVED', 'APPROVAL_REQUEST_EXECUTED', 'CANDIDATE_EXCLUDED'])).order_by(AuditLog.id).all()
+    assert [(e.action, e.object_type, e.object_id) for e in trail] == [
+        ('APPROVAL_REQUEST_APPROVED', 'approval_request', str(request_id)),
+        ('APPROVAL_REQUEST_EXECUTED', 'approval_request', str(request_id)),
+        ('CANDIDATE_EXCLUDED', 'candidate', str(cand.id)),
+    ]
+    assert {(e.username, e.session_id, e.success) for e in trail} == {('delegate2', trail[0].session_id, True)}
+
+
+def test_self_approval_recorded_as_refused(client, admin):
+    _, request_id = _pending_exclusion(client, admin)
+    r = client.post(f'/api/approval-requests/{request_id}/approve', headers=login(client, 'delegate'))
+    assert r.status_code == 403
+    [entry] = entries('APPROVAL_REQUEST_REFUSED')
+    assert entry.object_id == str(request_id) and entry.success is False
+    assert entry.details['reason'] == 'requester_cannot_approve_own_request'
+    assert entries('APPROVAL_REQUEST_APPROVED') == []
+
+
+def test_expired_approval_recorded_and_expiry_kept(client, admin):
+    from app.models import ApprovalRequest
+    _, request_id = _pending_exclusion(client, admin)
+    _expire_all_requests()
+    r = client.post(f'/api/approval-requests/{request_id}/approve', headers=login(client, 'delegate2'))
+    assert r.status_code == 409
+    [entry] = entries('APPROVAL_REQUEST_EXPIRED')
+    assert entry.success is False and entry.details['reason'] == 'expired'
+    db.session.expire_all()
+    assert db.session.get(ApprovalRequest, request_id).status == 'expired'   # not rolled back
+
+
+def test_listing_expires_overdue_requests_and_records_each(client, admin):
+    from app.models import ApprovalRequest
+    _, request_id = _pending_exclusion(client, admin)
+    _expire_all_requests()
+    assert client.get('/api/approval-requests', headers=login(client, 'delegate2')).status_code == 200
+    [viewed] = entries('APPROVAL_REQUESTS_VIEWED')
+    [expired] = entries('APPROVAL_REQUEST_EXPIRED')
+    assert viewed.success and expired.success and expired.object_id == str(request_id)
+    db.session.expire_all()
+    assert db.session.get(ApprovalRequest, request_id).status == 'expired'
+
+
+def test_approvals_alias_works(client, admin):
+    # Was a 500 error before: the alias called the other route's wrapped view
+    r = client.get('/api/approvals', headers=login(client, 'delegate'))
+    assert r.status_code == 200 and 'requests' in r.get_json()
+    assert len(entries('APPROVAL_REQUESTS_VIEWED')) == 1
+
+
+def test_every_privileged_route_is_audited(app):
+    assert unaudited_privileged_routes(app) == []
+
+
 def test_voter_actions_are_not_privileged(app):
     # Voter routes (enrol, cast a ballot...) are not required to use @audited
     assert not any('/api/voting/' in r or '/api/voters/me' in r
