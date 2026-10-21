@@ -7,7 +7,8 @@ from app.models.terminal import Terminal
 from app.security.mission_access import FINGERPRINT_RE, normalise_fingerprint
 from app.services.audit import log_action
 from app.utils import constants as C
-from app.utils.helpers import utcnow, validate_required_fields, roles_required
+from app.security.rbac import P, permission_required
+from app.utils.helpers import utcnow, validate_required_fields
 
 missions_bp = Blueprint('missions', __name__)
 
@@ -49,14 +50,14 @@ def _parse(data):
 
 
 @missions_bp.route('/', methods=['GET'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.MISSION_MANAGE)
 def list_missions(current_user):
     missions = Mission.query.order_by(Mission.name).all()
     return jsonify({'missions': [m.to_dict() for m in missions], 'total': len(missions)}), C.HTTP_OK
 
 
 @missions_bp.route('/', methods=['POST'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.MISSION_MANAGE)
 def add_mission(current_user):
     clean, error = _parse(request.get_json(silent=True))
     if error:
@@ -73,7 +74,7 @@ def add_mission(current_user):
 
 
 @missions_bp.route('/<int:mission_id>/deactivate', methods=['PUT'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.MISSION_MANAGE)
 def deactivate_mission(current_user, mission_id):
     """Stops voting from this mission straight away: the next session is refused."""
     mission = Mission.query.get(mission_id)
@@ -88,7 +89,7 @@ def deactivate_mission(current_user, mission_id):
 
 
 @missions_bp.route('/<int:mission_id>/revoke-cert', methods=['POST'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.MISSION_MANAGE)
 def revoke_certificate(current_user, mission_id):
     """Revoke one device certificate (for example a lost or stolen terminal)."""
     mission = Mission.query.get(mission_id)
