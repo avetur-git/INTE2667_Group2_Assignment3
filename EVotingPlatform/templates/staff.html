@@ -92,9 +92,18 @@
   </div>
 
   <div class="col-12 role-section" data-roles="election_admin">
-    <div class="card"><div class="card-header d-flex justify-content-between"><h5 class="mb-0">Audit log</h5>
-      <button class="btn btn-sm btn-outline-secondary" onclick="loadAudit()">Refresh</button></div>
-      <div class="card-body"><div id="auditList" class="table-responsive" style="max-height:300px;overflow:auto"></div></div></div>
+    <div class="card"><div class="card-header"><h5 class="mb-2">Audit log</h5>
+      <!-- REQ-15: filters for the privileged-action audit trail -->
+      <form id="auditFilters" class="row g-2 align-items-center">
+        <div class="col-sm-3"><input class="form-control form-control-sm" name="action" placeholder="Action, e.g. VOTER_APPROVED"></div>
+        <div class="col-sm-2"><input class="form-control form-control-sm" name="username" placeholder="Username"></div>
+        <div class="col-auto form-check ms-2"><input class="form-check-input" type="checkbox" id="auditFailures" name="failures">
+          <label class="form-check-label small" for="auditFailures">Failures only</label></div>
+        <div class="col-auto form-check ms-2"><input class="form-check-input" type="checkbox" id="auditViews" name="views">
+          <label class="form-check-label small" for="auditViews">Show views</label></div>
+        <div class="col-auto ms-auto"><button class="btn btn-sm btn-outline-secondary" type="submit">Refresh</button></div>
+      </form></div>
+      <div class="card-body"><div id="auditList" class="table-responsive" style="max-height:400px;overflow:auto"></div></div></div>
   </div>
 </div>
 {% endblock %}
@@ -217,7 +226,9 @@ try {
           <td><button class="btn btn-sm btn-success" onclick="approveRequest(${req.id})">Approve</button>
               <button class="btn btn-sm btn-outline-danger" onclick="rejectRequest(${req.id})">Reject</button></td>
         </tr>`).join('') : '<tr><td colspan="5" class="text-muted">No pending approvals.</td></tr>';
-    document.getElementById('approvalRequestList')?.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>Target</th><th>Reason</th><th>Requested by</th><th>Action</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    // `?.` cannot be assigned to (it was a syntax error that stopped this whole script)
+    const approvalList = document.getElementById('approvalRequestList');
+    if (approvalList) approvalList.innerHTML = '<table class="table table-sm"><thead><tr><th>ID</th><th>Target</th><th>Reason</th><th>Requested by</th><th>Action</th></tr></thead><tbody>' + rows + '</tbody></table>';
 } catch (err) { console.warn(err); }
 }
 async function approveRequest(id) {
@@ -289,11 +300,42 @@ document.getElementById('staffForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try { await post('/admin/users', formData(e.target)); showAlert('Staff account created', 'success'); e.target.reset(); } catch (err) { showAlert(err.message, 'danger'); }
 });
-async function loadAudit() {
-    const r = await apiRequest('/admin/audit-logs?limit=50');
-    document.getElementById('auditList').innerHTML = '<table class="table table-sm"><thead><tr><th>Time (UTC)</th><th>User</th><th>Action</th><th>Object</th><th>OK</th></tr></thead><tbody>' +
-        r.logs.map(l => `<tr><td>${esc(l.created_at)}</td><td>${esc(l.username)}</td><td>${esc(l.action)}</td><td>${esc(l.object_type)} ${esc(l.object_id)}</td><td>${l.success ? '✓' : '✗'}</td></tr>`).join('') + '</tbody></table>';
+// REQ-15: who, what, on what, when, where (IP / session / browser) and outcome
+function auditDetails(d) {
+    if (!d) return '';
+    return Object.entries(d).filter(([k]) => k !== 'error' && k !== 'status')
+        .map(([k, v]) => `<div><span class="text-muted">${esc(k)}:</span> ${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</div>`).join('');
 }
+function auditOutcome(l) {
+    if (l.success) return '<span class="text-success">✓</span>';
+    const reason = l.details && l.details.error ? esc(l.details.error) : '';
+    const status = l.details && l.details.status ? ` (${esc(l.details.status)})` : '';
+    return `<span class="text-danger">✗</span> <small>${reason}${status}</small>`;
+}
+async function loadAudit() {
+    const f = formData(document.getElementById('auditFilters'));
+    const params = new URLSearchParams({ limit: 100 });
+    if (f.action) params.set('action', f.action.trim().toUpperCase());
+    if (f.username) params.set('username', f.username.trim());
+    if (f.failures) params.set('success', 'false');
+    if (!f.views) params.set('hide_views', 'true');
+    try {
+        const r = await apiRequest('/admin/audit-logs?' + params);
+        document.getElementById('auditList').innerHTML = !r.logs.length ? '<p class="text-muted mb-0">No matching entries.</p>' :
+            '<table class="table table-sm small align-top"><thead><tr><th>Time (UTC)</th><th>User</th><th>Action</th><th>Object</th>' +
+            '<th>Outcome</th><th>Source</th><th>Details</th></tr></thead><tbody>' +
+            r.logs.map(l => `<tr class="${l.success ? '' : 'table-danger'}">
+                <td class="text-nowrap">${esc((l.created_at || '').replace('T', ' ').slice(0, 19))}</td>
+                <td>${esc(l.username || '—')}</td><td><code>${esc(l.action)}</code></td>
+                <td>${esc(l.object_type || '')} ${esc(l.object_id || '')}</td>
+                <td>${auditOutcome(l)}</td>
+                <td title="${esc(l.user_agent || '')}">${esc(l.ip_address || '—')}<br>
+                    <span class="text-muted">${l.session_id ? 'session ' + esc(l.session_id.slice(0, 8)) : 'no session'}</span></td>
+                <td>${auditDetails(l.details)}</td></tr>`).join('') + '</tbody></table>';
+    } catch (err) { showAlert(err.message, 'danger'); }
+}
+document.getElementById('auditFilters').addEventListener('submit', (e) => { e.preventDefault(); loadAudit(); });
+document.querySelectorAll('#auditFilters input[type=checkbox]').forEach(c => c.addEventListener('change', loadAudit));
 document.addEventListener('DOMContentLoaded', init);
 </script>
 {% endblock %}
