@@ -17,7 +17,7 @@ and services never need to change.
 | REQ-07 | DDoS protection | In front of the app (infrastructure). `/health` is available for health checks | Nothing. |
 | REQ-08 | 99.9% availability, failover, paper fallback | Infrastructure (second region, health checks). `/health` and `POST /api/terminals/<id>/heartbeat` already exist | Single instance. |
 | REQ-09 | Scale from 7,000 to 40,000 terminals | Infrastructure (autoscaling) and the database (see limitations). `scripts/simulate_election.py` is a starting point for load tests | Single process, SQLite. |
-| REQ-10 | MFA for privileged users | Hook `verify_mfa`, called in `app/routes/auth.py` `login()` for staff roles | No second factor. |
+| REQ-10 | MFA for privileged users | Hook `verify_mfa`, called in `app/routes/auth.py` `login()` for staff roles | **Implemented** in `app/security/webauthn_mfa.py` (WebAuthn security keys). Enforced only when `MFA_REQUIRED=true` (off for now). See `docs/REQ-10_WEBAUTHN.md`. |
 | REQ-11 | Role-based access control | `roles_required` in `app/utils/helpers.py` (every protected route uses it) and the `users.role` column | A plain role-name check. |
 | REQ-12 | Real-time eligibility against the authoritative roll | Hook `lookup_electoral_roll`, called in `app/services/eligibility.py` | Reads the local `voters` table. |
 | REQ-13 | One ballot per voter, across all channels | Hooks `has_already_voted` and `pre_cast`. Table: `vote_records` | A plain check then insert (not atomic). Add a unique constraint on `(voter_id, election_id)` or a central register. |
