@@ -38,6 +38,11 @@ class HookRegistry:
         for n in names:
             self._hooks[n] = self._defaults[n]
 
+    def get(self, name):
+        """The function currently registered for a hook. Lets a solution wrap the
+        existing check instead of replacing it (see app/security/mission_access.py)."""
+        return self._hooks[name]
+
     def run(self, name, *args, **kwargs):
         return self._hooks[name](*args, **kwargs)
 
