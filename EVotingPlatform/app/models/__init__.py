@@ -9,7 +9,9 @@ from .audit import AuditLog
 from .tally import TallyResult
 from .candidateHistory import CandidateHistory
 from .approval_request import ApprovalRequest
+from .webauthn import WebAuthnCredential, WebAuthnChallenge, EnrolmentCode
 
 __all__ = ['User', 'Election', 'Division', 'Candidate', 'Voter', 'VoteRecord',
            'Ballot', 'SpentToken', 'BallotCheckpoint', 'Terminal', 'AuditLog',
-           'TallyResult', 'CandidateHistory', 'ApprovalRequest']
+           'TallyResult', 'CandidateHistory', 'ApprovalRequest',
+           'WebAuthnCredential', 'WebAuthnChallenge', 'EnrolmentCode']

@@ -20,7 +20,8 @@ UNKNOWN_IP = '100.64.1.5'         # not in the geo-IP table
 def app():
     app = create_app({'TESTING': True, 'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
                     'SQLALCHEMY_BINDS': {'ballots': 'sqlite:///:memory:'},
-                    'BCRYPT_ROUNDS': 4, 'ENFORCE_MISSION_ACCESS': True})
+                    'BCRYPT_ROUNDS': 4, 'ENFORCE_MISSION_ACCESS': True,
+                    'MFA_REQUIRED': False})  # REQ-10 off, as in conftest.py
     with app.app_context():
         yield app
         db.session.remove()

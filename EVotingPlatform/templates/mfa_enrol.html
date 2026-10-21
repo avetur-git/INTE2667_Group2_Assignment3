@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Register Security Key - E-Voting Platform{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card">
+            <div class="card-header text-center"><h4>🔑 Register a Security Key</h4></div>
+            <div class="card-body">
+                <p class="text-muted small">For staff accounts. Ask an administrator for a one-time
+                    enrolment code, then use your security key, Windows Hello or phone passkey.</p>
+                <form id="enrolForm">
+                    <div class="mb-3"><label class="form-label" for="username">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required autocomplete="username"></div>
+                    <div class="mb-3"><label class="form-label" for="password">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password"></div>
+                    <div class="mb-3"><label class="form-label" for="enrolment_code">Enrolment code</label>
+                        <input type="text" class="form-control" id="enrolment_code" name="enrolment_code" required
+                               placeholder="XXXX-XXXX-XXXX" autocomplete="one-time-code"></div>
+                    <div class="d-grid"><button type="submit" class="btn btn-primary" id="enrolBtn">Register key</button></div>
+                </form>
+            </div>
+            <div class="card-footer text-center"><small><a href="/login">Back to login</a></small></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/webauthn.js"></script>
+<script>
+document.getElementById('enrolForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('enrolBtn'); btn.disabled = true;
+    try {
+        const f = new FormData(e.target);
+        const body = { username: f.get('username'), password: f.get('password'),
+                       enrolment_code: f.get('enrolment_code') };
+        const begin = await apiRequest('/auth/webauthn/register/begin', { method: 'POST', body: JSON.stringify(body) });
+        const credential = await createCredential(begin.options);
+        await apiRequest('/auth/webauthn/register/finish', { method: 'POST',
+            body: JSON.stringify({ ...body, credential }) });
+        showAlert('Security key registered. You can now log in with it.', 'success');
+        e.target.reset();
+    } catch (err) { showAlert(err.message, 'danger'); }
+    finally { btn.disabled = false; }
+});
+</script>
+{% endblock %}

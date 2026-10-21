@@ -59,6 +59,10 @@ PUBLIC_ENDPOINTS = {
     'auth.register', 'auth.login',
     'elections.list_divisions', 'elections.list_elections', 'elections.get_election',
     'candidates.list_candidates', 'results.public_results', 'terminals.heartbeat',
+    # REQ-10: security-key enrolment and the first login step happen before a
+    # token exists; each checks the password (and enrolment code) itself
+    'main.mfa_enrol_page', 'webauthn.register_begin', 'webauthn.register_finish',
+    'webauthn.login_begin',
 }
 LOGIN_ONLY_ENDPOINTS = {'auth.get_profile', 'auth.logout'}
 
