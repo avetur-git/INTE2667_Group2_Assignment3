@@ -9,6 +9,8 @@ from app.services.audit import log_action
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields, roles_required
 from app.services.candidate_history import record_change, diff_fields
+from app.security.rbac import P, permission_required
+
 
 candidates_bp = Blueprint('candidates', __name__)
 
@@ -30,7 +32,7 @@ def list_candidates():
 
 
 @candidates_bp.route('/', methods=['POST'])
-@roles_required(C.ROLE_DELEGATE)
+@permission_required(P.CANDIDATE_MANAGE)
 def add_candidate(current_user):
     """A Commissioner's delegate enters candidate details, including order within party group (REQ-17)."""
     data = request.get_json(silent=True)
@@ -70,7 +72,7 @@ def add_candidate(current_user):
 
 
 @candidates_bp.route('/<int:candidate_id>', methods=['PUT'])
-@roles_required(C.ROLE_DELEGATE)
+@permission_required(P.CANDIDATE_MANAGE)
 def update_candidate(current_user, candidate_id):
     """Edit name, party, group order or ballot position (draft elections only)."""
     cand = Candidate.query.get(candidate_id)
@@ -92,7 +94,7 @@ def update_candidate(current_user, candidate_id):
 
 
 @candidates_bp.route('/<int:candidate_id>/exclude', methods=['POST'])
-@roles_required(C.ROLE_DELEGATE)
+@permission_required(P.CANDIDATE_EXCLUDE)
 def exclude_candidate(current_user, candidate_id):
     """Exclude a candidate when the High Court (Court of Disputed Returns) orders a
     recount. After excluding, re-run the tally. REQ-18 adds dual authorisation."""

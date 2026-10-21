@@ -3,7 +3,7 @@ from app.models.election import Election
 from app.services.audit import log_action
 from app.services.tallying import stored_results, export_results
 from app.utils import constants as C
-from app.utils.helpers import roles_required
+from app.security.rbac import P, permission_required
 
 results_bp = Blueprint('results', __name__)
 
@@ -32,7 +32,7 @@ def public_results(election_id):
 
 
 @results_bp.route('/<int:election_id>/detail', methods=['GET'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.RESULTS_DETAIL_READ)
 def detailed_results(current_user, election_id):
     """Full counts with every round, for the election admin."""
     election, err = _counted_election(election_id)
@@ -42,7 +42,7 @@ def detailed_results(current_user, election_id):
 
 
 @results_bp.route('/<int:election_id>/export', methods=['GET'])
-@roles_required(C.ROLE_ADMIN)
+@permission_required(P.RESULTS_EXPORT)
 def export(current_user, election_id):
     """Results package for sharing with external systems."""
     election, err = _counted_election(election_id)

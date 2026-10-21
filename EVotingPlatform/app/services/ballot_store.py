@@ -3,21 +3,39 @@
 Base: ballots live in the same database as everything else.
 REQ-01 moves this behind a separate ballot system, and REQ-14 encrypts the
 stored values, by changing ONLY this file (and the protect_data hooks)."""
+
+from sqlalchemy.exc import IntegrityError
+
 from app import db
-from app.models.ballot import Ballot
+from app.models.ballot import Ballot, SpentToken
 from app.security.hooks import hooks
+from app.security.tokens import InvalidToken, verify_token
+from app.services.errors import ServiceError
 from app.utils.helpers import generate_uuid, generate_receipt_code
 
 
-def save_ballot(*, election, division_id, state, channel, terminal_id,
+def save_ballot(*, token, election, division_id, state,
                 house_order, senate_atl, senate_btl, senate_order, senate_source):
+    """REQ-01: the ballot side never receives a voter, user or session.
+    It accepts a ballot only with a valid, unused token."""
+    try:
+        nonce = verify_token(token)
+    except InvalidToken:
+        raise ServiceError('Invalid ballot token', 403)
+    if db.session.get(SpentToken, nonce) is not None:
+        raise ServiceError('Ballot token already used', 409)
+    db.session.add(SpentToken(nonce=nonce))
+    try:
+        db.session.flush()
+    except IntegrityError:
+        db.session.rollback()
+        raise ServiceError('Ballot token already used', 409)
+
     ballot = Ballot(
         ballot_uid=generate_uuid(),
         election_id=election.id,
         division_id=division_id,
         state=state,
-        channel=channel,
-        terminal_id=terminal_id,
         house_order=hooks.run('protect_data', house_order),
         senate_atl=hooks.run('protect_data', senate_atl),
         senate_btl=hooks.run('protect_data', senate_btl),
@@ -28,7 +46,6 @@ def save_ballot(*, election, division_id, state, channel, terminal_id,
     db.session.add(ballot)
     db.session.flush()   # get ballot.id without committing
     return ballot
-
 
 def _open(ballot):
     """Return a plain dict with decoded preference lists."""

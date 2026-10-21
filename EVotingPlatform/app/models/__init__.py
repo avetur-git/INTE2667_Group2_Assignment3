@@ -3,11 +3,12 @@ from .user import User
 from .election import Election, Division
 from .candidate import Candidate
 from .voter import Voter, VoteRecord
-from .ballot import Ballot
+from .ballot import Ballot, SpentToken
 from .terminal import Terminal
 from .audit import AuditLog
 from .tally import TallyResult
 from .candidateHistory import CandidateHistory
 
 __all__ = ['User', 'Election', 'Division', 'Candidate', 'Voter', 'VoteRecord',
-           'Ballot', 'Terminal', 'AuditLog', 'TallyResult', 'CandidateHistory']
+           'Ballot', 'Terminal', 'AuditLog', 'TallyResult','SpentToken','CandidateHistory']
+
