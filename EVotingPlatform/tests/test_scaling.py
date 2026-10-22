@@ -98,6 +98,34 @@ def test_store_back_after_outage(replicas, redis_server):
     assert bad_login(clients[0]).status_code == 429
 
 
+# --- Audit chain under concurrent load ---------------------------------------------
+
+def test_audit_chain_survives_concurrent_writes(replicas):
+    """40 audit entries written at once through 2 replicas all land in one valid
+    REQ-04 chain. (The collisions the Docker load test found need slow shared
+    storage and busy 1-CPU replicas to show up, so this checks correctness under
+    concurrency; the load test in loadtest/ is what showed the fix works.)"""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from app.security.audit_chain import find_problems
+    from app.services.audit import log_action
+
+    start = threading.Barrier(40)
+
+    def write(i):
+        app = replicas[i % 2]
+        with app.app_context():
+            start.wait()
+            log_action('LOAD_TEST_ENTRY', object_type='test', object_id=i)
+
+    with ThreadPoolExecutor(max_workers=40) as pool:
+        list(pool.map(write, range(40)))      # re-raises any failure
+
+    with replicas[0].app_context():
+        assert AuditLog.query.filter_by(action='LOAD_TEST_ENTRY').count() == 40
+        assert find_problems() == []
+
+
 # --- Load-test voters ------------------------------------------------------------
 
 def test_bulk_voters_share_one_full_cost_hash(app):
