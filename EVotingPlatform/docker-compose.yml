@@ -1,10 +1,33 @@
 services:
+  # REQ-07: the only way in. Per-IP rate limits, then forwards to the app.
+  # Still http://localhost:9001 as before.
+  proxy:
+    image: nginx:1.28-alpine
+    ports:
+      - "9001:8080"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   web:
     build: .
-    ports:
-      - "9001:5000"
+    # REQ-07: no published port. The app is reached only through the proxy,
+    # which is what makes trusting its X-Forwarded-For header safe.
+    expose:
+      - "5000"
     environment:
       - FLASK_ENV=production
+      # REQ-07: one trusted proxy in front; per-endpoint limits (requests/seconds)
+      - TRUSTED_PROXY_COUNT=1
+      - RATE_LIMIT_LOGIN=20/60
+      - RATE_LIMIT_VOTE=30/60
       - SECRET_KEY=change-me-before-real-use
       - JWT_SECRET_KEY=change-me-before-real-use
       - DATABASE_URL=sqlite:////app/data/evoting.db
