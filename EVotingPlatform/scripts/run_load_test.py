@@ -95,7 +95,7 @@ def run_k6(network, label, first, votes, terminals, election_id):
 
 
 def write_table(results, args):
-    base = results[0]['votes_per_second']
+    base = results[0]['votes_per_second'] or None     # a run with 0 votes has no speed-up
     lines = [
         f"Load test run {datetime.now():%Y-%m-%d %H:%M}: {args.terminals} concurrent terminals, "
         f"{args.votes} votes per run, each replica limited to 1 CPU.",
@@ -105,9 +105,10 @@ def write_table(results, args):
         '|---|---|---|---|---|---|---|---|---|',
     ]
     for r in results:
+        speed_up = f"{r['votes_per_second'] / base:.2f}x" if base else '-'
         lines.append(
             f"| {r['replicas']} | {r['votes_recorded']} | {r['votes_failed']} | {r['duration_s']:.1f} "
-            f"| {r['votes_per_second']:.2f} | {r['votes_per_second'] / base:.2f}x "
+            f"| {r['votes_per_second']:.2f} | {speed_up} "
             f"| {r['vote_flow_ms']['median']:.0f} | {r['vote_flow_ms']['p95']:.0f} "
             f"| {r['cast_ms']['median']:.0f} |")
     text = '\n'.join(lines) + '\n'
@@ -132,11 +133,15 @@ def main():
     if not election_id:
         sys.exit('No open election: run  docker compose exec web flask --app run seed-demo')
 
-    # Every vote needs a voter who has not voted yet: continue after the last one used.
+    # Every vote needs a voter who has not voted yet: continue after the highest
+    # numbered load voter who has voted (not the count: failed votes leave gaps).
     used = int(in_app("from app.models import User, VoteRecord, Voter\n"
-                      "print(VoteRecord.query.join(Voter, Voter.id == VoteRecord.voter_id)"
+                      "names = [u for (u,) in VoteRecord.query"
+                      ".join(Voter, Voter.id == VoteRecord.voter_id)"
                       ".join(User, User.id == Voter.user_id)"
-                      ".filter(User.username.like('load%')).count())"))
+                      ".filter(User.username.like('load%'))"
+                      ".with_entities(User.username)]\n"
+                      "print(max((int(n[4:]) for n in names), default=0))"))
     needed = used + args.votes * len(counts)
     print(f'Creating load-test voters up to load{needed:03d} ...', flush=True)
     compose('exec', '-T', 'web', 'flask', '--app', 'run', 'seed-demo-voters',
