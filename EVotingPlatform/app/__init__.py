@@ -101,6 +101,12 @@ def create_app(test_config=None):
     from app.security.electoral_roll import register_electoral_roll
     register_electoral_roll()
 
+    # REQ-14: encrypt sensitive data at rest, and mark HTTPS responses with HSTS
+    from app.security.data_protection import register_data_protection
+    from app.security.transport import register_transport_security
+    register_data_protection()
+    register_transport_security(app)
+
     # REQ-15: refuse to start if a privileged route is not audited
     from app.security.audit_trail import check_privileged_routes_audited
     check_privileged_routes_audited(app)

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app import db
 from app.models import Ballot, Candidate, ReceiptSignature, User
 from app.security.chain import ballot_payload, entry_hash
+from app.security.data_protection import unprotect_data
 from app.security.receipts import verify_receipt
 from app.seed import seed_demo
 from tests.test_api_flow import full_vote, login
@@ -171,7 +172,8 @@ def test_ballot_hash_includes_random_ballot_id(client, election_id):
     first, second = vote(client, 'voter1', election_id), vote(client, 'voter2', election_id)
     b1 = Ballot.query.filter_by(receipt_code=first['receipt_code']).one()
     b2 = Ballot.query.filter_by(receipt_code=second['receipt_code']).one()
-    assert b1.house_order == b2.house_order                     # same choices...
+    assert unprotect_data(b1.house_order) == unprotect_data(b2.house_order)   # same choices...
+    assert b1.house_order != b2.house_order        # ...stored differently (REQ-14 encryption)
     assert b1.ballot_hash != b2.ballot_hash                     # ...different hashes
     assert 'ballot_uid' in ballot_payload(b1)
     changed = {**ballot_payload(b1), 'ballot_uid': 'another-random-id'}
