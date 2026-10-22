@@ -7,6 +7,7 @@ from app.security.rate_limit import rate_limited
 from app.services.audit import log_action
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields, user_required
+from app.utils.validation import check_password, clean_email, clean_username
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -20,14 +21,13 @@ def register():
         if not ok:
             return jsonify({'error': error}), C.HTTP_BAD_REQUEST
 
-        username = data['username'].strip()
-        email = data['email'].strip().lower()
-        password = data['password']
-
-        if len(username) < 3:
-            return jsonify({'error': 'Username must be at least 3 characters long'}), 400
-        if len(password) < 6:
-            return jsonify({'error': 'Password must be at least 6 characters long'}), 400
+        # Same rules as a voter login created by an AEC officer (app/utils/validation.py)
+        username, error = clean_username(data['username'])
+        email, email_error = clean_email(data['email'])
+        password, password_error = check_password(data['password'], username)
+        error = error or email_error or password_error
+        if error:
+            return jsonify({'error': error}), C.HTTP_BAD_REQUEST
         if User.query.filter_by(username=username).first():
             return jsonify({'error': 'Username already exists'}), C.HTTP_CONFLICT
         if User.query.filter_by(email=email).first():

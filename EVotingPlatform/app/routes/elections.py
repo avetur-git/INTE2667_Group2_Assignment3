@@ -8,6 +8,7 @@ from app.services.errors import ServiceError
 from app.services.tallying import tally_election
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields
+from app.utils.validation import check_election_date, clean_text
 from app.security.rbac import P, permission_required
 from app.security.audit_trail import audit, audited
 
@@ -47,7 +48,11 @@ def create_election(current_user):
         election_date = date.fromisoformat(data['election_date'])
     except ValueError:
         return jsonify({'error': 'election_date must be YYYY-MM-DD'}), C.HTTP_BAD_REQUEST
-    election = Election(name=data['name'].strip(), election_date=election_date,
+    name, error = clean_text(data['name'], 'Election name', 150)
+    _, date_error = check_election_date(election_date)
+    if error or date_error:
+        return jsonify({'error': error or date_error}), C.HTTP_BAD_REQUEST
+    election = Election(name=name, election_date=election_date,
                         senate_seats_override=data.get('senate_seats_override'))
     db.session.add(election)
     db.session.commit()

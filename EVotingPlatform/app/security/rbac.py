@@ -91,9 +91,7 @@ ROLE_PERMISSIONS = {
         P.STAFF_MANAGE,
         P.AUDIT_READ,
         P.CANDIDATE_HISTORY_READ,
-        P.TERMINAL_MANAGE,
         P.MISSION_MANAGE,
-        P.STAFF_MANAGE,
     }),
 }
 
