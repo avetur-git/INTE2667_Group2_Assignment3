@@ -39,7 +39,8 @@ app/
   seed.py, cli.py      demo data (flask seed-demo)
 templates/             Bootstrap pages: home, login, register, dashboard, vote, staff, results
 tests/                 counting and API tests (pytest)
-scripts/               simulate_election.py, flood_test.py (REQ-07 rate-limit demo), failover_demo.py (REQ-08)
+scripts/               simulate_election.py, flood_test.py (REQ-07 rate-limit demo), failover_demo.py (REQ-08), run_load_test.py (REQ-09)
+loadtest/              k6 vote-flow load test and results (REQ-09)
 docker/nginx/          reverse proxy with per-IP rate limits (REQ-07)
 docker/haproxy/        load balancer with health checks over the app replicas (REQ-08)
 infra/                 Terraform: network, firewall rules, DB users (REQ-06, see infra/README.md)
