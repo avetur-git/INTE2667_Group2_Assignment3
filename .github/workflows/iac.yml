@@ -123,3 +123,16 @@ jobs:
               || { echo "::error::expected finding $check was not reported"; exit 1; }
             echo "caught: $check"
           done
+
+  proxy-config:
+    name: Reverse proxy config (nginx -t)
+    runs-on: ubuntu-latest
+    # REQ-07: the rate-limiting proxy config must load in the same nginx image
+    # docker-compose.yml uses. `web` is the app's hostname inside Compose.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test nginx.conf
+        run: |
+          docker run --rm --add-host web:127.0.0.1 \
+            -v "$PWD/EVotingPlatform/docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            nginx:1.28-alpine nginx -t

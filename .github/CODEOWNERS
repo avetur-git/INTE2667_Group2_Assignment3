@@ -9,6 +9,7 @@
 /EVotingPlatform/tests/iac/          @avetur-git
 /EVotingPlatform/Dockerfile          @avetur-git
 /EVotingPlatform/docker-compose.yml  @avetur-git
+/EVotingPlatform/docker/             @avetur-git
 
 # The workflows, this file and the ruleset: without this, a PR could weaken
 # the checks or remove the owner requirement in the same change.
