@@ -20,6 +20,10 @@ class AuditLog(db.Model):
     session_id = db.Column(db.String(64), nullable=True)
     success = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=utcnow)
+    # REQ-04: hash chain, written by app/security/audit_chain.py
+    seq = db.Column(db.Integer, unique=True, nullable=True)
+    prev_hash = db.Column(db.String(64), nullable=True)
+    entry_hash = db.Column(db.String(64), nullable=True)
 
     def to_dict(self):
         return {
@@ -35,6 +39,9 @@ class AuditLog(db.Model):
             'session_id': self.session_id,
             'success': self.success,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'seq': self.seq,
+            'prev_hash': self.prev_hash,
+            'entry_hash': self.entry_hash,
         }
 
 
