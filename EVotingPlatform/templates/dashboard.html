@@ -17,9 +17,9 @@
             <div class="col-md-4"><label class="form-label">Suburb</label><input class="form-control" name="suburb" required></div>
             <div class="col-md-3"><label class="form-label">State</label>
                 <select class="form-select" name="state" id="stateSelect">
-                    {% for s in ['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'] %}<option>{{ s }}</option>{% endfor %}
+                    {% for s in ['NSW','VIC','QLD','WA','SA','TAS','ACT','NT'] %}<option{% if s == 'VIC' %} selected{% endif %}>{{ s }}</option>{% endfor %}
                 </select></div>
-            <div class="col-md-2"><label class="form-label">Postcode</label><input class="form-control" name="postcode" required></div>
+            <div class="col-md-2"><label class="form-label">Postcode</label><input class="form-control" name="postcode" required inputmode="numeric" pattern="\d{4}" maxlength="4" title="Postcode must be 4 digits"></div>
             <div class="col-md-3"><label class="form-label">Division</label><select class="form-select" name="division_id" id="divisionSelect" required></select></div>
             <div class="col-12"><button class="btn btn-success" type="submit" id="formBtn">Submit</button></div>
         </form>
@@ -38,8 +38,15 @@ function fillDivisions() {
 
 async function load() {
     if (!requireLogin()) return;
-    allDivisions = (await apiRequest('/elections/divisions')).divisions;
-    const me = await apiRequest('/voters/me');
+    let me;
+    try {
+        allDivisions = (await apiRequest('/elections/divisions')).divisions;
+        me = await apiRequest('/voters/me');
+    } catch (err) {   // never leave the page stuck on "Loading..."
+        document.getElementById('status-card').innerHTML =
+            `<div class="card-body text-danger">Could not load your enrolment: ${esc(err.message)}</div>`;
+        return;
+    }
     myVoter = me.voter;
     const card = document.getElementById('status-card');
     const formCard = document.getElementById('form-card');

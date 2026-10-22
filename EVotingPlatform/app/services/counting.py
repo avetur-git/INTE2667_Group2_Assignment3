@@ -27,13 +27,20 @@ def _lowest(candidates, tallies):
 # ---------------------------------------------------------------------------
 # House of Representatives: full preferential (instant-runoff)
 # ---------------------------------------------------------------------------
+def _has_votes(ballots, candidate_ids):
+    """True if at least one ballot gives a preference to a contesting candidate."""
+    return any(c in candidate_ids for prefs in ballots for c in prefs)
+
+
 def count_house(ballots, candidate_ids):
     """ballots: list of candidate-id lists, most preferred first.
     candidate_ids: candidates still in the contest (excluded ones left out).
     Returns {'winner': id|None, 'formal_ballots': n, 'rounds': [...]}"""
     continuing = set(candidate_ids)
     rounds = []
-    if not continuing:
+    if not continuing or not _has_votes(ballots, continuing):
+        # No votes for any candidate: nobody is elected (eliminating on all-zero
+        # tallies would otherwise "elect" whoever the tie-break leaves last)
         return {'winner': None, 'formal_ballots': len(ballots), 'rounds': rounds}
 
     while True:
@@ -74,6 +81,8 @@ def count_senate(ballots, candidate_ids, seats):
     first) rather than all at once; the surplus is passed on by multiplying the
     weight of every ballot in that candidate's pile by surplus / tally."""
     seats = min(seats, len(candidate_ids))
+    if not _has_votes(ballots, set(candidate_ids)):
+        return {'elected': [], 'quota': 0, 'formal_ballots': len(ballots), 'rounds': []}
     quota = senate_quota(len(ballots), seats) if seats else 0
     weights = [Fraction(1)] * len(ballots)
     continuing = set(candidate_ids)

@@ -4,6 +4,7 @@ from app.models.audit import AuditLog
 from app.models.user import User
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields
+from app.utils.validation import check_password, clean_email, clean_username
 from app.security.rbac import P, permission_required
 from app.security.audit_trail import audit, audited
 
@@ -21,10 +22,15 @@ def create_staff_user(current_user):
         return jsonify({'error': error}), 400
     if data['role'] not in C.PRIVILEGED_ROLES:
         return jsonify({'error': f'role must be one of {", ".join(C.PRIVILEGED_ROLES)}'}), 400
-    if User.query.filter((User.username == data['username'].strip()) |
-                         (User.email == data['email'].strip().lower())).first():
+    username, error = clean_username(data['username'])
+    email, email_error = clean_email(data['email'])
+    password, password_error = check_password(data['password'], username, staff=True)
+    error = error or email_error or password_error
+    if error:
+        return jsonify({'error': error}), C.HTTP_BAD_REQUEST
+    if User.query.filter((User.username == username) | (User.email == email)).first():
         return jsonify({'error': 'Username or email already exists'}), C.HTTP_CONFLICT
-    user = User(data['username'].strip(), data['email'].strip().lower(), data['password'], data['role'])
+    user = User(username, email, password, data['role'])
     db.session.add(user)
     db.session.commit()
     audit.target(user.id)

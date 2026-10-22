@@ -23,6 +23,10 @@
 {% block scripts %}
 <script src="/static/js/webauthn.js"></script>
 <script>
+// Sent here because a stored session stopped working (see apiRequest in base.html)
+if (new URLSearchParams(window.location.search).get('reason') === 'expired') {
+    document.addEventListener('DOMContentLoaded', () => showAlert('Your session has expired. Please log in again.', 'warning'));
+}
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('loginBtn'); btn.disabled = true;

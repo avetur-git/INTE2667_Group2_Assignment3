@@ -48,6 +48,19 @@ def test_senate_surplus_transfers_to_next_preference():
     assert set(out['elected']) == {1, 2, 3}
 
 
-def test_senate_no_ballots_still_fills_seats():
+def test_senate_no_ballots_elects_nobody():
+    # Was test_senate_no_ballots_still_fills_seats: with no votes the count used to
+    # "elect" candidates by tie-break order. It now finishes and elects no one.
     out = count_senate([], [1, 2, 3, 4], 2)
-    assert len(out['elected']) == 2
+    assert out['elected'] == [] and out['formal_ballots'] == 0
+
+
+def test_house_no_ballots_has_no_winner():
+    out = count_house([], [1, 2, 3])
+    assert out['winner'] is None and out['formal_ballots'] == 0
+
+
+def test_ballots_for_no_contesting_candidate_elect_nobody():
+    # Every preference is for a candidate no longer in the contest (e.g. excluded)
+    assert count_house([[9], [9, 8]], [1, 2])['winner'] is None
+    assert count_senate([[9]], [1, 2, 3], 2)['elected'] == []
