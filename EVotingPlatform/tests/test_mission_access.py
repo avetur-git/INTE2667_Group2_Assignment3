@@ -21,7 +21,9 @@ def app():
     app = create_app({'TESTING': True, 'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
                     'SQLALCHEMY_BINDS': {'ballots': 'sqlite:///:memory:'},
                     'BCRYPT_ROUNDS': 4, 'ENFORCE_MISSION_ACCESS': True,
-                    'MFA_REQUIRED': False})  # REQ-10 off, as in conftest.py
+                                         'MFA_REQUIRED': False,  # REQ-10 off, as in conftest.py
+                                         'TERMINAL_SIGNATURE_REQUIRED': False})  # REQ-03 off, REQ-19 is tested on its own
+                    
     with app.app_context():
         yield app
         db.session.remove()
