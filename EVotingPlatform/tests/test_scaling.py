@@ -136,3 +136,5 @@ def test_bulk_voters_share_one_full_cost_hash(app):
     assert len({u.password_hash for u in users}) == 1      # hashed once...
     assert all(u.check_password('ChangeMe123!') for u in users[:3])   # ...and logins still work
     assert not users[0].check_password('wrong')
+    # VIC voters only in VIC divisions, even when other states have divisions too
+    assert all(u.voter.state == u.voter.division.state == 'VIC' for u in users)

@@ -91,7 +91,9 @@ def seed_demo_voters(count, prefix='demo'):
     All of them have the demo password, so it is hashed once at the normal cost
     and the hash reused: creating thousands of voters stays quick, while every
     login still pays the full bcrypt cost, as a real one would."""
-    divisions = Division.query.order_by(Division.id).all()
+    # The voters below live in VIC, so they go only in VIC divisions (seed-demo
+    # also creates divisions in other states).
+    divisions = Division.query.filter_by(state='VIC').order_by(Division.id).all()
     if not divisions:
         raise ValueError('run seed-demo first')
     existing = {u for (u,) in db.session.query(User.username).filter(User.username.like(f'{prefix}%'))}
