@@ -47,6 +47,16 @@ def create_app(test_config=None):
     jwt.init_app(app)
     CORS(app)
 
+    # Every login-token problem is a 401 with an 'error' message, so the pages can
+    # tell "log in again" apart from other failures. (Flask-JWT-Extended's default
+    # is 422 with 'msg' for a malformed or wrongly signed token.)
+    def _session_error(message):
+        return jsonify({'error': message}), 401
+
+    jwt.invalid_token_loader(lambda reason: _session_error('Your session is not valid. Please log in again.'))
+    jwt.expired_token_loader(lambda header, payload: _session_error('Your session has expired. Please log in again.'))
+    jwt.unauthorized_loader(lambda reason: _session_error('Please log in to continue.'))
+
     # Models and security hooks (base behaviour; see app/security/hooks.py)
     from app import models  # noqa: F401
     from app.security import register_default_hooks

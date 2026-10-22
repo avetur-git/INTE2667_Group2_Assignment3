@@ -94,13 +94,27 @@
             const headers = { 'Content-Type': 'application/json', ...(authToken && { 'Authorization': `Bearer ${authToken}` }) };
             const response = await fetch(API_BASE + url, { ...options, headers });
             const data = await response.json().catch(() => ({}));
-            if (response.status === 401 && authToken) { localStorage.clear(); authToken = null; updateNavbar(); }
+            // A stored session the server no longer accepts (expired, or from an old
+            // database): forget all of it - not just the token - and log in again
+            if (response.status === 401 && authToken) { clearSession(); goToLogin('expired'); }
             if (!response.ok) throw new Error(data.error || 'Request failed');
             return data;
         }
 
+        function clearSession() {
+            localStorage.clear();
+            authToken = null; currentRole = null; currentUsername = null;
+            updateNavbar();
+        }
+
+        function goToLogin(reason) {
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login' + (reason ? '?reason=' + encodeURIComponent(reason) : '');
+            }
+        }
+
         function logout() {
-            localStorage.clear(); authToken = null; currentRole = null;
+            clearSession();
             window.location.href = '/';
         }
 
