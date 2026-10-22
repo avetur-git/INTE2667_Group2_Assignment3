@@ -74,6 +74,10 @@ def create_app(test_config=None):
     from app.routes.receipts import receipts_bp
     app.register_blueprint(receipts_bp, url_prefix='/api')
 
+    # REQ-07: rate limits on login and voting, and the client IP behind the proxy
+    from app.security.rate_limit import init_app as init_rate_limit
+    init_rate_limit(app)
+
     # REQ-19: diplomatic mission allow-list and location checks
     from app.security.mission_access import init_app as init_mission_access
     init_mission_access(app)
