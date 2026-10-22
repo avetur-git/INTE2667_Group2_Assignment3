@@ -85,17 +85,25 @@ def seed_demo(election_status=C.ELECTION_OPEN, house_per_division=4,
 
 
 def seed_demo_voters(count, prefix='demo'):
-    """REQ-08 demo: extra enrolled voters (demo001, demo002, ...) so a failover
-    demo can keep casting votes for a while. Skips usernames that already exist."""
+    """REQ-08 / REQ-09 demo: extra enrolled voters (demo001, demo002, ...) for the
+    failover demo and the load test. Skips usernames that already exist.
+
+    All of them have the demo password, so it is hashed once at the normal cost
+    and the hash reused: creating thousands of voters stays quick, while every
+    login still pays the full bcrypt cost, as a real one would."""
     divisions = Division.query.order_by(Division.id).all()
     if not divisions:
         raise ValueError('run seed-demo first')
+    existing = {u for (u,) in db.session.query(User.username).filter(User.username.like(f'{prefix}%'))}
+    shared_hash = None
     created = []
     for i in range(1, count + 1):
         username = f'{prefix}{i:03d}'
-        if User.query.filter_by(username=username).first():
+        if username in existing:
             continue
-        user = User(username, f'{username}@example.test', DEMO_PASSWORD, C.ROLE_VOTER)
+        user = User(username, f'{username}@example.test', DEMO_PASSWORD, C.ROLE_VOTER,
+                    password_hash=shared_hash)
+        shared_hash = user.password_hash
         db.session.add(user)
         db.session.flush()
         db.session.add(Voter(user_id=user.id, first_name=FIRST[i % len(FIRST)],
