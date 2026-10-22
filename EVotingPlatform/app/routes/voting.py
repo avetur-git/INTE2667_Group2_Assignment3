@@ -5,12 +5,14 @@ from app.services.errors import ServiceError
 from app.services.voting import build_ballot_paper, cast_vote
 from app.utils import constants as C
 from app.utils.helpers import get_request_meta
+from app.security.rate_limit import rate_limited
 from app.security.rbac import P, permission_required
 
 voting_bp = Blueprint('voting', __name__)
 
 
 @voting_bp.route('/ballot-paper', methods=['GET'])
+@rate_limited('vote', per='user')
 @permission_required(P.BALLOT_CAST)
 def ballot_paper(current_user):
     """The candidates this voter will see (their division for the House, their state for the Senate)."""
@@ -26,6 +28,7 @@ def ballot_paper(current_user):
 
 
 @voting_bp.route('/cast', methods=['POST'])
+@rate_limited('vote', per='user')
 @permission_required(P.BALLOT_CAST)
 def cast(current_user):
     """Cast a ballot.

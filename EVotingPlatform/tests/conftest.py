@@ -9,7 +9,10 @@ def app():
                       'BCRYPT_ROUNDS': 4,
                       # REQ-10: off so other tests can log staff in with a password;
                       # tests/test_webauthn_mfa.py turns it on
-                      'MFA_REQUIRED': False})
+                      'MFA_REQUIRED': False,
+                      # REQ-07: off so other tests can log in many times from one
+                      # client; tests/test_rate_limit.py turns it on
+                      'RATE_LIMIT_ENABLED': False})
     with app.app_context():
         yield app
         db.session.remove()

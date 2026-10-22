@@ -3,6 +3,7 @@ from flask_jwt_extended import create_access_token
 from app import db
 from app.models.user import User
 from app.security.hooks import hooks
+from app.security.rate_limit import rate_limited
 from app.services.audit import log_action
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields, user_required
@@ -45,6 +46,7 @@ def register():
 
 
 @auth_bp.route('/login', methods=['POST'])
+@rate_limited('login')
 def login():
     try:
         data = request.get_json(silent=True)
