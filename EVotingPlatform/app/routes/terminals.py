@@ -3,6 +3,7 @@ from app import db
 from app.models.terminal import Terminal
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields, utcnow
+from app.utils.validation import clean_terminal_id, clean_text
 from app.security.rbac import P, permission_required
 from app.security.audit_trail import audit, audited
 
@@ -27,10 +28,14 @@ def register_terminal(current_user):
         return jsonify({'error': error}), 400
     if data['channel'] not in C.TERMINAL_CHANNELS:
         return jsonify({'error': f'channel must be one of {", ".join(C.TERMINAL_CHANNELS)}'}), 400
-    if Terminal.query.filter_by(terminal_id=data['terminal_id']).first():
+    terminal_id, error = clean_terminal_id(data['terminal_id'])
+    location_name, location_error = clean_text(data['location_name'], 'Location', 150)
+    if error or location_error:
+        return jsonify({'error': error or location_error}), C.HTTP_BAD_REQUEST
+    if Terminal.query.filter_by(terminal_id=terminal_id).first():
         return jsonify({'error': 'Terminal already registered'}), C.HTTP_CONFLICT
-    terminal = Terminal(terminal_id=data['terminal_id'], channel=data['channel'],
-                        location_name=data['location_name'], state=data.get('state'),
+    terminal = Terminal(terminal_id=terminal_id, channel=data['channel'],
+                        location_name=location_name, state=data.get('state'),
                         country=data.get('country', 'Australia'),
                         software_version=data.get('software_version'),
                         software_signature=data.get('software_signature'))

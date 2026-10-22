@@ -8,6 +8,8 @@ from app.services.audit import log_action
 from app.services.eligibility import check_eligibility
 from app.utils import constants as C
 from app.utils.helpers import validate_required_fields
+from app.utils.validation import (check_date_of_birth, check_password, clean_email, clean_postcode,
+                                  clean_text, clean_username)
 from app.security.rbac import P, permission_required
 from app.security.audit_trail import audit, audited
 
@@ -26,6 +28,18 @@ def _parse_voter_fields(data):
         dob = date.fromisoformat(str(data['date_of_birth']))
     except ValueError:
         return None, 'date_of_birth must be YYYY-MM-DD'
+    dob, error = check_date_of_birth(dob)
+    if error:
+        return None, error
+    text = {}
+    for field, label, max_len in (('first_name', 'First name', 80), ('last_name', 'Last name', 80),
+                                  ('address_line', 'Address', 200), ('suburb', 'Suburb', 100)):
+        text[field], error = clean_text(data[field], label, max_len)
+        if error:
+            return None, error
+    postcode, error = clean_postcode(data['postcode'])
+    if error:
+        return None, error
     state = str(data['state']).strip().upper()
     if state not in C.STATES:
         return None, f'state must be one of {", ".join(C.STATES)}'
@@ -35,10 +49,8 @@ def _parse_voter_fields(data):
     if division.state != state:
         return None, 'Division is not in the given state'
     return {
-        'first_name': data['first_name'].strip(), 'last_name': data['last_name'].strip(),
-        'date_of_birth': dob, 'address_line': data['address_line'].strip(),
-        'suburb': data['suburb'].strip(), 'state': state,
-        'postcode': str(data['postcode']).strip(), 'division_id': division.id,
+        **text, 'date_of_birth': dob, 'state': state,
+        'postcode': postcode, 'division_id': division.id,
         'is_citizen': bool(data.get('is_citizen', True)),
         'is_overseas': bool(data.get('is_overseas', False)),
     }, None
@@ -121,10 +133,15 @@ def register_citizen(current_user):
         ok, error = validate_required_fields(data, ['username', 'email', 'password'])
         if not ok:
             return jsonify({'error': error}), C.HTTP_BAD_REQUEST
-        if User.query.filter((User.username == data['username'].strip()) |
-                             (User.email == data['email'].strip().lower())).first():
+        username, error = clean_username(data['username'])
+        email, email_error = clean_email(data['email'])
+        password, password_error = check_password(data['password'], username)
+        error = error or email_error or password_error
+        if error:
+            return jsonify({'error': error}), C.HTTP_BAD_REQUEST
+        if User.query.filter((User.username == username) | (User.email == email)).first():
             return jsonify({'error': 'Username or email already exists'}), C.HTTP_CONFLICT
-        user = User(data['username'].strip(), data['email'].strip().lower(), data['password'], C.ROLE_VOTER)
+        user = User(username, email, password, C.ROLE_VOTER)
         db.session.add(user)
         db.session.flush()
 
