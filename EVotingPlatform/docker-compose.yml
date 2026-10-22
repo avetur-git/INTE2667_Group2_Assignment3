@@ -1,6 +1,47 @@
+# REQ-08: settings shared by every API replica (web, web2).
+x-web: &web
+  build: .
+  image: evoting-web:local
+  # REQ-07: no published port. The app is reached only through the proxy,
+  # which is what makes trusting its X-Forwarded-For header safe.
+  expose:
+    - "5000"
+  volumes:
+    - ./data:/app/data
+    # REQ-08: shared signing keys, so every replica signs and verifies alike
+    - app-instance:/app/instance
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 40s
+
+x-web-env: &web-env
+  FLASK_ENV: production
+  # REQ-07: one trusted proxy in front; per-endpoint limits (requests/seconds)
+  TRUSTED_PROXY_COUNT: "1"
+  RATE_LIMIT_LOGIN: 20/60
+  RATE_LIMIT_VOTE: 30/60
+  SECRET_KEY: change-me-before-real-use
+  JWT_SECRET_KEY: change-me-before-real-use
+  # REQ-08: both databases on the shared volume, so all replicas use the same data
+  DATABASE_URL: sqlite:////app/data/evoting.db
+  BALLOT_DATABASE_URL: sqlite:////app/data/ballots.db
+  PORT: "5000"
+  # REQ-05: write-once audit archive. The app only gets the restricted
+  # users (writer: upload only, reader: read only), never the MinIO root.
+  AUDIT_ARCHIVE_ENDPOINT: minio:9000
+  AUDIT_ARCHIVE_BUCKET: audit-archive
+  AUDIT_ARCHIVE_ACCESS_KEY: ${AUDIT_ARCHIVE_ACCESS_KEY:-audit-writer}
+  AUDIT_ARCHIVE_SECRET_KEY: ${AUDIT_ARCHIVE_SECRET_KEY:-change-me-writer-secret}
+  AUDIT_ARCHIVE_READER_ACCESS_KEY: ${AUDIT_ARCHIVE_READER_ACCESS_KEY:-audit-reader}
+  AUDIT_ARCHIVE_READER_SECRET_KEY: ${AUDIT_ARCHIVE_READER_SECRET_KEY:-change-me-reader-secret}
+
 services:
-  # REQ-07: the only way in. Per-IP rate limits, then forwards to the app.
-  # Still http://localhost:9001 as before.
+  # REQ-07: the only way in. Per-IP rate limits, then forwards to the load
+  # balancer. Still http://localhost:9001 as before.
   proxy:
     image: nginx:1.28-alpine
     ports:
@@ -8,7 +49,7 @@ services:
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - web
+      - lb
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/nginx-health"]
@@ -16,42 +57,38 @@ services:
       timeout: 5s
       retries: 3
 
-  web:
-    build: .
-    # REQ-07: no published port. The app is reached only through the proxy,
-    # which is what makes trusting its X-Forwarded-For header safe.
-    expose:
-      - "5000"
-    environment:
-      - FLASK_ENV=production
-      # REQ-07: one trusted proxy in front; per-endpoint limits (requests/seconds)
-      - TRUSTED_PROXY_COUNT=1
-      - RATE_LIMIT_LOGIN=20/60
-      - RATE_LIMIT_VOTE=30/60
-      - SECRET_KEY=change-me-before-real-use
-      - JWT_SECRET_KEY=change-me-before-real-use
-      - DATABASE_URL=sqlite:////app/data/evoting.db
-      - PORT=5000
-      # REQ-05: write-once audit archive. The app only gets the restricted
-      # users (writer: upload only, reader: read only), never the MinIO root.
-      - AUDIT_ARCHIVE_ENDPOINT=minio:9000
-      - AUDIT_ARCHIVE_BUCKET=audit-archive
-      - AUDIT_ARCHIVE_ACCESS_KEY=${AUDIT_ARCHIVE_ACCESS_KEY:-audit-writer}
-      - AUDIT_ARCHIVE_SECRET_KEY=${AUDIT_ARCHIVE_SECRET_KEY:-change-me-writer-secret}
-      - AUDIT_ARCHIVE_READER_ACCESS_KEY=${AUDIT_ARCHIVE_READER_ACCESS_KEY:-audit-reader}
-      - AUDIT_ARCHIVE_READER_SECRET_KEY=${AUDIT_ARCHIVE_READER_SECRET_KEY:-change-me-reader-secret}
+  # REQ-08: spreads requests over the replicas and health-checks them every 2 s.
+  # Status page: http://localhost:8404 (local machine only).
+  lb:
+    image: haproxy:3.0-alpine
+    ports:
+      - "127.0.0.1:8404:8404"
     volumes:
-      - ./data:/app/data
+      - ./docker/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - web
+      - web2
     restart: unless-stopped
+
+  # REQ-08: two replicas of the API. Kill either one and voting continues.
+  web:
+    <<: *web
+    environment:
+      <<: *web-env
+      INSTANCE_NAME: web
     depends_on:
       minio-setup:
         condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+
+  web2:
+    <<: *web
+    environment:
+      <<: *web-env
+      INSTANCE_NAME: web2
+    depends_on:
+      # Start after web has created the database tables.
+      web:
+        condition: service_healthy
 
   # REQ-05: MinIO stands in for cloud WORM storage (S3 Object Lock). Built from
   # source at a pinned release and commit - see docker/minio/Dockerfile.
@@ -90,3 +127,4 @@ services:
 
 volumes:
   minio-data:
+  app-instance:

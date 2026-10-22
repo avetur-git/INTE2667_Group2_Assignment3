@@ -1,5 +1,5 @@
 import click
-from app.seed import seed_demo
+from app.seed import seed_demo, seed_demo_voters
 
 
 def register_cli(app):
@@ -10,6 +10,13 @@ def register_cli(app):
         click.echo(result['message'])
         if 'password' in result:
             click.echo(f"Logins: admin / officer / delegate / voter1..voter5 / voter_os  (password: {result['password']})")
+
+    @app.cli.command('seed-demo-voters')
+    @click.option('--count', default=100, show_default=True, help='Number of voters to add.')
+    def seed_demo_voters_command(count):
+        """REQ-08 demo: add enrolled voters demo001..demoNNN (run seed-demo first)."""
+        created = seed_demo_voters(count)
+        click.echo(f'Added {len(created)} voters (demo001..demo{count:03d}, same password as seed-demo)')
 
     @app.cli.command('issue-enrolment-code')
     @click.argument('username')
