@@ -2,6 +2,9 @@
 x-web: &web
   build: .
   image: evoting-web:local
+  # REQ-09: each replica is a fixed-size unit, like a cloud instance or task.
+  # Capacity grows by adding replicas, not by one replica taking more CPU.
+  cpus: 1.0
   # REQ-07: no published port. The app is reached only through the proxy,
   # which is what makes trusting its X-Forwarded-For header safe.
   expose:
@@ -24,6 +27,8 @@ x-web-env: &web-env
   TRUSTED_PROXY_COUNT: "1"
   RATE_LIMIT_LOGIN: 20/60
   RATE_LIMIT_VOTE: 30/60
+  # REQ-09: rate-limit counters shared by all replicas (the API keeps no state)
+  RATE_LIMIT_STORAGE_URL: redis://ratelimit:6379/0
   SECRET_KEY: change-me-before-real-use
   JWT_SECRET_KEY: change-me-before-real-use
   # REQ-08: both databases on the shared volume, so all replicas use the same data
@@ -52,7 +57,9 @@ services:
       - lb
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/nginx-health"]
+      # 127.0.0.1, not localhost: in this image localhost is ::1 (IPv6) and
+      # nginx listens on IPv4 only, so the check would always fail.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/nginx-health"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -71,6 +78,9 @@ services:
     restart: unless-stopped
 
   # REQ-08: two replicas of the API. Kill either one and voting continues.
+  # REQ-09: web2 can be scaled out; haproxy picks up every web2 container:
+  #   docker compose up -d --scale web2=2     # 3 replicas in total
+  #   docker compose up -d --scale web2=0     # web alone
   web:
     <<: *web
     environment:
@@ -79,16 +89,33 @@ services:
     depends_on:
       minio-setup:
         condition: service_completed_successfully
+      ratelimit:
+        condition: service_started
 
   web2:
     <<: *web
     environment:
       <<: *web-env
-      INSTANCE_NAME: web2
+      # No INSTANCE_NAME: scaled copies report their own container hostname.
     depends_on:
       # Start after web has created the database tables.
       web:
         condition: service_healthy
+
+  # REQ-09: shared rate-limit counters for all replicas. Memory only: losing
+  # them on restart just resets the limits, which is safe.
+  ratelimit:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no",
+              "--maxmemory", "64mb", "--maxmemory-policy", "volatile-ttl"]
+    expose:
+      - "6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   # REQ-05: MinIO stands in for cloud WORM storage (S3 Object Lock). Built from
   # source at a pinned release and commit - see docker/minio/Dockerfile.
