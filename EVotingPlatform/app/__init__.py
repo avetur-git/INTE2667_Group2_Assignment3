@@ -78,6 +78,11 @@ def create_app(test_config=None):
     from app.security.rate_limit import init_app as init_rate_limit
     init_rate_limit(app)
 
+    # REQ-03: only terminals with software signed by the approved authority may take votes.
+    # Keep this BEFORE REQ-19: REQ-19 wraps whatever check is registered here.
+    from app.security.terminal_verification import register_terminal_verification
+    register_terminal_verification()
+
     # REQ-19: diplomatic mission allow-list and location checks
     from app.security.mission_access import init_app as init_mission_access
     init_mission_access(app)
@@ -104,7 +109,7 @@ def create_app(test_config=None):
     # REQ-20: signed, non-identifying receipts (needs the REQ-02 ballot hash)
     from app.security.receipts import register_signed_receipts
     register_signed_receipts()
-
+    
     # REQ-05: append-only audit table and write-once archive. Keep this LAST:
     # it needs the tables to exist, and it wraps whatever write_audit_record
     # hook is registered above (for example REQ-04's hash chain).
