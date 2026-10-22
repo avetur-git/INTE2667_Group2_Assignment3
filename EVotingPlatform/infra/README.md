@@ -45,6 +45,16 @@ configuration is validated and scanned in CI but not applied to an AWS account.
 The app containers (ECS or similar) are left to REQ-08/REQ-09; they attach to
 `app_security_group_id` and `app_subnet_ids` from `outputs.tf`.
 
+## DDoS protection in the deployment design (REQ-07)
+
+In production the load balancer above sits behind AWS Shield Advanced
+(scrubbing), CloudFront (CDN) and AWS WAF (rate-based rules and managed rule
+groups), and the ALB security group is narrowed from `0.0.0.0/0` to CloudFront's
+origin-facing prefix list so the edge cannot be bypassed. This part is
+documented, not yet in Terraform. Inside the deployment, the nginx proxy
+(`docker/nginx/nginx.conf`) and the API (`app/security/rate_limit.py`) throttle
+abnormal traffic with HTTP 429. Full design: [docs/REQ-07_DDOS.md](../docs/REQ-07_DDOS.md).
+
 ## Changing infrastructure
 
 1. Branch from `main` and edit the `.tf` files.
