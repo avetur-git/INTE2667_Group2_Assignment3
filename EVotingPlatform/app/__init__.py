@@ -87,6 +87,10 @@ def create_app(test_config=None):
     from app.security.mission_access import init_app as init_mission_access
     init_mission_access(app)
 
+    # REQ-12: check eligibility live against the authoritative electoral roll
+    from app.security.electoral_roll import register_electoral_roll
+    register_electoral_roll()
+
     # REQ-15: refuse to start if a privileged route is not audited
     from app.security.audit_trail import check_privileged_routes_audited
     check_privileged_routes_audited(app)
@@ -109,6 +113,11 @@ def create_app(test_config=None):
     # REQ-20: signed, non-identifying receipts (needs the REQ-02 ballot hash)
     from app.security.receipts import register_signed_receipts
     register_signed_receipts()
+
+    # REQ-04: hash-chain every audit entry. Must come BEFORE REQ-05, which wraps this hook.
+    from app.security.audit_chain import init_app as init_audit_chain
+    init_audit_chain(app)
+
     
     # REQ-05: append-only audit table and write-once archive. Keep this LAST:
     # it needs the tables to exist, and it wraps whatever write_audit_record
