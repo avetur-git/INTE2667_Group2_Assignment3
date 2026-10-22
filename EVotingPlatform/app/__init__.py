@@ -113,6 +113,11 @@ def create_app(test_config=None):
     # REQ-20: signed, non-identifying receipts (needs the REQ-02 ballot hash)
     from app.security.receipts import register_signed_receipts
     register_signed_receipts()
+
+    # REQ-04: hash-chain every audit entry. Must come BEFORE REQ-05, which wraps this hook.
+    from app.security.audit_chain import init_app as init_audit_chain
+    init_audit_chain(app)
+
     
     # REQ-05: append-only audit table and write-once archive. Keep this LAST:
     # it needs the tables to exist, and it wraps whatever write_audit_record
