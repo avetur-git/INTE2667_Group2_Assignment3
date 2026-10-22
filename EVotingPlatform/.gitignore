@@ -9,3 +9,7 @@ data/*.db
 .pytest_cache/
 .DS_Store 
 .env.example
+
+terminal_software/manifest.json
+terminal_software/manifest.sig
+terminal_software/signer.crt
