@@ -55,6 +55,16 @@ documented, not yet in Terraform. Inside the deployment, the nginx proxy
 (`docker/nginx/nginx.conf`) and the API (`app/security/rate_limit.py`) throttle
 abnormal traffic with HTTP 429. Full design: [docs/REQ-07_DDOS.md](../docs/REQ-07_DDOS.md).
 
+## Availability in the deployment design (REQ-08)
+
+Active-active in two regions (Sydney, Melbourne): Route 53 health-checked
+routing between regions, an ALB per region across three availability zones with
+target-group health checks on `/health`, at least two API tasks per zone, and an
+Aurora PostgreSQL Global Database. Documented, not yet in Terraform; the local
+prototype shows the same health-check failover with two replicas behind haproxy.
+Full design: [docs/REQ-08_AVAILABILITY.md](../docs/REQ-08_AVAILABILITY.md); paper
+fallback: [docs/REQ-08_PAPER_FALLBACK.md](../docs/REQ-08_PAPER_FALLBACK.md).
+
 ## Changing infrastructure
 
 1. Branch from `main` and edit the `.tf` files.

@@ -33,6 +33,7 @@
           { "context": "IaC security scan (tfsec)" },
           { "context": "IaC scanner self-test" },
           { "context": "Reverse proxy config (nginx -t)" },
+          { "context": "Load balancer config (haproxy -c)" },
           { "context": "Unit tests" },
           { "context": "Static analysis (Bandit)" },
           { "context": "Dependency audit (pip-audit)" }

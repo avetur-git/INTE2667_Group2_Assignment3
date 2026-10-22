@@ -39,8 +39,9 @@ app/
   seed.py, cli.py      demo data (flask seed-demo)
 templates/             Bootstrap pages: home, login, register, dashboard, vote, staff, results
 tests/                 counting and API tests (pytest)
-scripts/               simulate_election.py, flood_test.py (REQ-07 rate-limit demo)
+scripts/               simulate_election.py, flood_test.py (REQ-07 rate-limit demo), failover_demo.py (REQ-08)
 docker/nginx/          reverse proxy with per-IP rate limits (REQ-07)
+docker/haproxy/        load balancer with health checks over the app replicas (REQ-08)
 infra/                 Terraform: network, firewall rules, DB users (REQ-06, see infra/README.md)
 docs/SECURITY_HOOKS.md requirement-by-requirement map of where each solution goes
 ```
@@ -61,7 +62,7 @@ flask --app run seed-demo        # demo election, staff, voters, terminals
 python run.py                    # http://localhost:3000
 ```
 
-Docker: `docker compose up --build` then open http://localhost:9001 (run `docker compose exec web flask --app run seed-demo` for demo data). Requests go through the nginx proxy, which rate-limits per client (REQ-07, see [docs/REQ-07_DDOS.md](docs/REQ-07_DDOS.md)).
+Docker: `docker compose up --build` then open http://localhost:9001 (run `docker compose exec web flask --app run seed-demo` for demo data). Requests go through the nginx proxy, which rate-limits per client (REQ-07, see [docs/REQ-07_DDOS.md](docs/REQ-07_DDOS.md)), then the haproxy load balancer, which spreads them over two app replicas `web` and `web2` and takes a failed one out of rotation (REQ-08, see [docs/REQ-08_AVAILABILITY.md](docs/REQ-08_AVAILABILITY.md); status page http://localhost:8404).
 
 Demo logins (password `ChangeMe123!`): `admin`, `officer`, `delegate`, `voter1` to `voter5`, and `voter_os` (overseas, must use the diplomatic mission channel with terminal `DM-0001`). Polling station terminals are `PS-0001` to `PS-0010`.
 

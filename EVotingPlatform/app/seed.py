@@ -82,3 +82,28 @@ def seed_demo(election_status=C.ELECTION_OPEN, house_per_division=4,
                              enrolment_status=C.ENROLMENT_ENROLLED, registered_via='aec_officer'))
     db.session.commit()
     return {'message': 'Demo data created', 'election_id': election.id, 'password': DEMO_PASSWORD}
+
+
+def seed_demo_voters(count, prefix='demo'):
+    """REQ-08 demo: extra enrolled voters (demo001, demo002, ...) so a failover
+    demo can keep casting votes for a while. Skips usernames that already exist."""
+    divisions = Division.query.order_by(Division.id).all()
+    if not divisions:
+        raise ValueError('run seed-demo first')
+    created = []
+    for i in range(1, count + 1):
+        username = f'{prefix}{i:03d}'
+        if User.query.filter_by(username=username).first():
+            continue
+        user = User(username, f'{username}@example.test', DEMO_PASSWORD, C.ROLE_VOTER)
+        db.session.add(user)
+        db.session.flush()
+        db.session.add(Voter(user_id=user.id, first_name=FIRST[i % len(FIRST)],
+                             last_name=LAST[(i // len(FIRST)) % len(LAST)],
+                             date_of_birth=date(1970 + i % 30, 1 + i % 12, 1 + i % 28),
+                             address_line=f'{i} Demo Rd', suburb='Exampleton', state='VIC',
+                             postcode='3000', division_id=divisions[i % len(divisions)].id,
+                             enrolment_status=C.ENROLMENT_ENROLLED, registered_via='aec_officer'))
+        created.append(username)
+    db.session.commit()
+    return created
