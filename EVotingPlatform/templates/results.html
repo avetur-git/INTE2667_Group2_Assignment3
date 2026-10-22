@@ -36,7 +36,8 @@ document.getElementById('loadBtn').addEventListener('click', async () => {
             `</tbody></table></div>` +
             r.senate.map(s => `<div class="card mb-4"><div class="card-header"><h5 class="mb-0">Senate - ${esc(s.state)} (${s.seats} seats)</h5></div>
             <table class="table mb-0"><thead><tr><th>#</th><th>Senator</th><th>Party</th></tr></thead><tbody>` +
-            s.elected.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${esc(c.party)}</td></tr>`).join('') +
+            (s.elected.length ? s.elected.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.name)}</td><td>${esc(c.party)}</td></tr>`).join('')
+                : '<tr><td colspan="3" class="text-muted">No result (no votes cast)</td></tr>') +
             `</tbody></table></div>`).join('');
     } catch (err) { out.innerHTML = ''; showAlert(err.message, 'warning'); }
 });

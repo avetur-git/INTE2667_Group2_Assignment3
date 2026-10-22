@@ -8,6 +8,13 @@ from app.utils import constants as C
 DEMO_PASSWORD = 'ChangeMe123!'
 
 DIVISIONS = [('Northfield', 'VIC'), ('Riverbend', 'VIC'), ('Hillcrest', 'VIC')]
+# One fictional division in every other state and territory, so forms never show
+# a state with no divisions and a voter enrolled anywhere has a full ballot.
+OTHER_STATE_DIVISIONS = [('Harbourside', 'NSW'), ('Sunvale', 'QLD'), ('Redgum', 'WA'),
+                         ('Saltbush', 'SA'), ('Tasman', 'TAS'), ('Capital Hill', 'ACT'),
+                         ('Red Centre', 'NT')]
+OTHER_STATE_HOUSE = 3        # House candidates per extra division
+OTHER_STATE_SENATE = (4, 2)  # Senate groups x candidates per group in each extra state
 PARTIES = ['Harbour Party', 'Unity Alliance', 'Green Valley', 'Workers First',
            'Heritage League', 'Coastal Voice', 'Future Forward', 'Rural Union']
 FIRST = ['Alex', 'Sam', 'Jordan', 'Taylor', 'Casey', 'Morgan', 'Riley', 'Jamie', 'Drew', 'Quinn']
@@ -59,6 +66,25 @@ def seed_demo(election_status=C.ELECTION_OPEN, house_per_division=4,
                                  name=f'{FIRST[n % 10]} {LAST[(n * 7) % 10]} (Independent)',
                                  party='Independent', group_code=C.UNGROUPED, group_order=i + 1,
                                  created_by=delegate.id))
+    # Other states: added after all VIC data so VIC ids stay the same
+    for name, state in OTHER_STATE_DIVISIONS:
+        d = Division(name=name, state=state)
+        db.session.add(d)
+        db.session.flush()
+        for pos in range(OTHER_STATE_HOUSE):
+            n += 1
+            db.session.add(Candidate(election_id=election.id, contest_type=C.CONTEST_HOUSE,
+                                     division_id=d.id, name=f'{FIRST[n % 10]} {LAST[(n * 3) % 10]}',
+                                     party=PARTIES[pos % len(PARTIES)], ballot_position=pos + 1,
+                                     created_by=delegate.id))
+        groups, per_group = OTHER_STATE_SENATE
+        for g in range(groups):
+            for order in range(per_group):
+                n += 1
+                db.session.add(Candidate(election_id=election.id, contest_type=C.CONTEST_SENATE,
+                                         state=state, name=f'{FIRST[n % 10]} {LAST[(n * 7) % 10]}',
+                                         party=PARTIES[g % len(PARTIES)], group_code=chr(ord('A') + g),
+                                         group_order=order + 1, created_by=delegate.id))
     election.status = election_status
 
     for i in range(1, 11):

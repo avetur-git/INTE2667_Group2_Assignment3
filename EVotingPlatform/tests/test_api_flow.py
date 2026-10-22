@@ -1,6 +1,6 @@
 from app import db
 from app.seed import seed_demo, DEMO_PASSWORD
-from app.models import Ballot, VoteRecord, Candidate, AuditLog, Voter
+from app.models import Ballot, VoteRecord, Candidate, AuditLog, Voter, Division
 from app.security.hooks import hooks
 from app.utils import constants as C
 
@@ -57,11 +57,15 @@ def test_full_election_lifecycle(client, app):
     client.put(f'/api/elections/{eid}/status', json={'status': 'closed'}, headers=admin)
     t = client.post(f'/api/elections/{eid}/tally', headers=admin)
     assert t.status_code == 200, t.get_json()
-    assert t.get_json()['senate_contests'] == 1
+    assert t.get_json()['senate_contests'] == len(C.STATES)   # demo data covers every state
 
     res = client.get(f'/api/results/{eid}').get_json()
-    assert len(res['house']) == 3
-    assert len(res['senate'][0]['elected']) == 12
+    assert len(res['house']) == Division.query.count()
+    vic = next(s for s in res['senate'] if s['state'] == 'VIC')
+    assert len(vic['elected']) == 12
+    # Nobody voted in the other states: no one is elected there (no winner from zero votes)
+    assert all(h['winner'] is None for h in res['house'] if h['division']['state'] != 'VIC')
+    assert all(s['elected'] == [] for s in res['senate'] if s['state'] != 'VIC')
     assert client.get(f'/api/results/{eid}/export', headers=admin).status_code == 200
 
 
@@ -132,7 +136,7 @@ def test_enrolment_and_address_update(client, app):
                                                 'password': 'secret123'})
     h = {'Authorization': f"Bearer {r.get_json()['access_token']}"}
     assert client.get('/api/voters/me', headers=h).get_json()['status'] == 'not_enrolled'
-    division = client.get('/api/elections/divisions').get_json()['divisions'][0]
+    division = client.get('/api/elections/divisions?state=VIC').get_json()['divisions'][0]
     e = client.post('/api/voters/enrol', headers=h, json={
         'first_name': 'New', 'last_name': 'Citizen', 'date_of_birth': '1999-01-01',
         'address_line': '1 Test St', 'suburb': 'Testville', 'state': 'VIC', 'postcode': '3000',
