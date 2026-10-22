@@ -39,7 +39,8 @@ app/
   seed.py, cli.py      demo data (flask seed-demo)
 templates/             Bootstrap pages: home, login, register, dashboard, vote, staff, results
 tests/                 counting and API tests (pytest)
-scripts/               simulate_election.py
+scripts/               simulate_election.py, flood_test.py (REQ-07 rate-limit demo)
+docker/nginx/          reverse proxy with per-IP rate limits (REQ-07)
 infra/                 Terraform: network, firewall rules, DB users (REQ-06, see infra/README.md)
 docs/SECURITY_HOOKS.md requirement-by-requirement map of where each solution goes
 ```
@@ -60,7 +61,7 @@ flask --app run seed-demo        # demo election, staff, voters, terminals
 python run.py                    # http://localhost:3000
 ```
 
-Docker: `docker compose up --build` then open http://localhost:9001 (run `docker compose exec web flask --app run seed-demo` for demo data).
+Docker: `docker compose up --build` then open http://localhost:9001 (run `docker compose exec web flask --app run seed-demo` for demo data). Requests go through the nginx proxy, which rate-limits per client (REQ-07, see [docs/REQ-07_DDOS.md](docs/REQ-07_DDOS.md)).
 
 Demo logins (password `ChangeMe123!`): `admin`, `officer`, `delegate`, `voter1` to `voter5`, and `voter_os` (overseas, must use the diplomatic mission channel with terminal `DM-0001`). Polling station terminals are `PS-0001` to `PS-0010`.
 

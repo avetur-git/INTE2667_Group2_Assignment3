@@ -74,6 +74,10 @@ def create_app(test_config=None):
     from app.routes.receipts import receipts_bp
     app.register_blueprint(receipts_bp, url_prefix='/api')
 
+    # REQ-07: rate limits on login and voting, and the client IP behind the proxy
+    from app.security.rate_limit import init_app as init_rate_limit
+    init_rate_limit(app)
+
     # REQ-03: only terminals with software signed by the approved authority may take votes.
     # Keep this BEFORE REQ-19: REQ-19 wraps whatever check is registered here.
     from app.security.terminal_verification import register_terminal_verification

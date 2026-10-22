@@ -32,6 +32,7 @@
           { "context": "Terraform format and validate" },
           { "context": "IaC security scan (tfsec)" },
           { "context": "IaC scanner self-test" },
+          { "context": "Reverse proxy config (nginx -t)" },
           { "context": "Unit tests" },
           { "context": "Static analysis (Bandit)" },
           { "context": "Dependency audit (pip-audit)" }
