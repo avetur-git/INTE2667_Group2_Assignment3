@@ -42,6 +42,12 @@ def create_app(test_config=None):
     if test_config:
         app.config.update(test_config)
 
+    # REQ-09: SQLite lets one writer in at a time. Under load, writers queue for
+    # the lock; let them wait up to 30 s (default 5 s) rather than fail with
+    # "database is locked". Production uses PostgreSQL, which has no such lock.
+    if app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite'):
+        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {'connect_args': {'timeout': 30}})
+
     # Initialize extensions with app
     db.init_app(app)
     jwt.init_app(app)
@@ -100,6 +106,12 @@ def create_app(test_config=None):
     # REQ-12: check eligibility live against the authoritative electoral roll
     from app.security.electoral_roll import register_electoral_roll
     register_electoral_roll()
+
+    # REQ-14: encrypt sensitive data at rest, and mark HTTPS responses with HSTS
+    from app.security.data_protection import register_data_protection
+    from app.security.transport import register_transport_security
+    register_data_protection()
+    register_transport_security(app)
 
     # REQ-15: refuse to start if a privileged route is not audited
     from app.security.audit_trail import check_privileged_routes_audited

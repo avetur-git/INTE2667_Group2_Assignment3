@@ -101,7 +101,7 @@ request against `infra/` like any other.
 | **AWS WAF** web ACL on CloudFront | Layer 7 filtering and automatic rate limiting before traffic reaches AWS region | Rate-based rules per IP over 5 minutes: 2,000 for all paths, 100 for `/api/auth/login`, 300 for `/api/voting/*`, action Block; AWS managed rules `CommonRuleSet`, `KnownBadInputsRuleSet`, `AmazonIpReputationList`; Shield Advanced automatic application-layer mitigation on |
 | **Origin lock** | Stops attackers going around CloudFront to the ALB directly | ALB security group (`infra/security_groups.tf`) changed from `0.0.0.0/0` to the AWS managed prefix list `com.amazonaws.global.cloudfront.origin-facing`, plus a secret origin header checked by the ALB |
 | **Detection and alerting** | Tell people an attack is happening | CloudWatch alarms on Shield `DDoSDetected`, WAF `BlockedRequests` and ALB 5xx/latency; `RATE_LIMITED` audit entries and nginx `limiting requests` lines forwarded to the SIEM; alerts to the on-call operations team |
-| **Shared rate-limit store** | Keep one limit per client across several app instances (REQ-09 scaling) | Amazon ElastiCache (Redis); the limiter's in-memory counters are replaced by Redis counters with the same rules |
+| **Shared rate-limit store** | Keep one limit per client across several app instances (REQ-09 scaling) | Amazon ElastiCache (Redis). Built locally by REQ-09: `RATE_LIMIT_STORAGE_URL` and the `ratelimit` Redis service |
 
 Not geo-blocked: overseas voters at diplomatic missions (REQ-19) must still
 reach the platform, so country blocking is not used at the edge.
@@ -142,8 +142,8 @@ Then log in as `admin` and open `GET /api/admin/audit-logs` to see the
 
 - No cloud resources are deployed; scrubbing, CDN and WAF exist only as the
   design above.
-- API counters are in memory for one process. They reset on restart and are
-  not shared between instances (see the shared store above).
+- API counters are shared between replicas in Redis since REQ-09 (memory only,
+  so they reset when Redis restarts). Without Redis each replica counts alone.
 - nginx throttling is logged in nginx's own log, not the audit table.
 - The polling-station address ranges are placeholders until the real ranges
   are known.

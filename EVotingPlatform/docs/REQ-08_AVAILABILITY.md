@@ -26,7 +26,7 @@ voter ─> nginx :9001 ─> haproxy (lb) ─┬─> web  :5000 ─┐
 
 | Part | File | Role |
 |---|---|---|
-| Two API replicas | `docker-compose.yml` (`web`, `web2`) | Same image and settings; `INSTANCE_NAME` tells them apart |
+| Two API replicas | `docker-compose.yml` (`web`, `web2`) | Same image and settings. Since REQ-09 `web2` can be scaled (`--scale web2=N`) and haproxy names its copies `web2-1`, `web2-2`, ...; the demo output shows `web2-1` |
 | Load balancer | `docker/haproxy/haproxy.cfg` | Round-robin over healthy replicas; active health checks; retries a failed connection on the other replica |
 | Health endpoint | `GET /health` (`app/routes/main.py`) | Runs `SELECT 1` on both databases; `200 healthy` or `503 unhealthy`, with the replica name and each check |
 | Demo | `scripts/failover_demo.py`, `flask seed-demo-voters` | Keeps voting while a replica is killed and shows which replica recorded each vote |
@@ -37,10 +37,11 @@ voter ─> nginx :9001 ─> haproxy (lb) ─┬─> web  :5000 ─┐
 |---|---|---|
 | `option httpchk GET /health`, `expect status 200` | | A replica that answers 503, errors or does not answer fails the check |
 | `inter 2s` | check every 2 s | |
-| `timeout check 1s` | | A hung replica fails within 1 s |
+| `timeout check 2s` | | A hung replica fails within 2 s (1 s before REQ-09; raised so a replica busy with logins is not mistaken for a dead one) |
 | `fall 2` | 2 failures in a row | **Removed within about 5 s** (2 intervals plus the check timeout; measured 4.8–5.6 s with `docker compose kill web`) |
 | `rise 2` | 2 passes in a row | Returned to rotation about 4 s after it is healthy again (measured 4.5–5.0 s after `docker compose start web`) |
 | `retries 2`, `option redispatch 1`, `timeout connect 1s` | | Before a dead replica is marked down, a request that cannot connect to it is retried on the other one. Retries happen only when the connection failed, so a vote is never sent twice |
+| `maxconn 4` (added by REQ-09) | | Each replica works on at most 4 requests at once; the rest queue in haproxy. Re-measured with this and the 2 s check timeout: removed after 4.7 s, back after 4.9 s, 16 of 16 votes recorded |
 
 A replica is also unhealthy when it is running but cannot reach a database
 (`/health` returns 503), not only when it is down.
@@ -55,7 +56,7 @@ A replica is also unhealthy when it is running but cannot reach a database
 | Signing keys (REQ-01, 02, 20) | Shared `app-instance` volume. A key is created at most once: written to a temp file and hard-linked into place, so if two replicas race, both use the first one written |
 | Logins | JWTs signed with the shared `JWT_SECRET_KEY`: a token from one replica works on the other |
 | WebAuthn challenges (REQ-10) | Already stored in the database |
-| REQ-07 rate-limit counters | **Per replica** (in memory). With two replicas a client can make up to twice the per-endpoint limit; nginx's per-IP limits in front still apply to the total. Production uses a shared store (below) |
+| REQ-07 rate-limit counters | Redis (`ratelimit` service), added by REQ-09: one limit per client however many replicas there are. Before that they were per replica |
 
 `web2` starts only after `web` is healthy, so the two do not create the
 database tables at the same time.
@@ -132,6 +133,5 @@ is deliberately not used.
   database failover in the prototype.
 - `haproxy` and `nginx` are single instances here. In production both roles are
   managed, multi-zone services (ALB, CloudFront).
-- Rate-limit counters are per replica (see above).
 - Recording paper mark-offs on the platform after a fallback (section 5 of the
   paper procedure) is a staff task with no screen of its own in the prototype.

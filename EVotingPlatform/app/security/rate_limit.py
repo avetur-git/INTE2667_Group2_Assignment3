@@ -16,13 +16,19 @@ for a client in each window is written to the audit log as RATE_LIMITED; later
 refusals in the same window are not, so a flood cannot flood the audit log too.
 
 Limits are config values of the form 'requests/seconds', e.g. RATE_LIMIT_LOGIN =
-'20/60'. Counters live in this process's memory. Running several app instances
-needs a shared store (Redis); see docs/REQ-07_DDOS.md.
+'20/60'.
+
+REQ-09: with RATE_LIMIT_STORAGE_URL set (redis://...), the counters live in
+Redis and every API replica shares them, so a client gets the same limit however
+many replicas there are. Without it they live in this process's memory (one
+replica, tests). If Redis cannot be reached, each replica falls back to its own
+counters rather than refusing or waving through all traffic.
 """
 import math
 import os
 import threading
 import time
+import uuid
 from collections import deque
 from functools import wraps
 
@@ -93,6 +99,61 @@ class RateLimiter:
             if not hits or hits[-1] <= now - window:
                 del self._hits[key]
                 self._logged.pop(key, None)
+
+
+# Sliding window in a Redis sorted set, run atomically inside Redis. Uses the
+# Redis server's clock so replicas with slightly different clocks still agree.
+# KEYS: hits sorted set, "breach already logged" marker
+# ARGV: window in ms, limit, unique member for this request
+# Returns {allowed, retry_after_ms, first_breach}
+_REDIS_SLIDING_WINDOW = """
+local t = redis.call('TIME')
+local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
+local window = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - window)
+if redis.call('ZCARD', KEYS[1]) < limit then
+    redis.call('ZADD', KEYS[1], now, ARGV[3])
+    redis.call('PEXPIRE', KEYS[1], window)
+    return {1, 0, 0}
+end
+local oldest = tonumber(redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')[2])
+local wait = oldest + window - now
+if wait < 1 then wait = 1 end
+local first = 0
+if redis.call('SET', KEYS[2], '1', 'PX', wait, 'NX') then first = 1 end
+return {0, wait, first}
+"""
+
+
+class RedisRateLimiter:
+    """Same rules as RateLimiter, with the counters in Redis so all replicas share them."""
+
+    def __init__(self, client, fallback=None):
+        self.client = client
+        self.fallback = fallback or RateLimiter()
+        self._script = client.register_script(_REDIS_SLIDING_WINDOW)
+        self._warned_at = 0.0
+
+    def hit(self, key, limit, window):
+        import redis   # only needed when Redis is configured
+        try:
+            allowed, wait_ms, first = self._script(
+                keys=[f'ratelimit:{key}', f'ratelimit:logged:{key}'],
+                args=[window * 1000, limit, uuid.uuid4().hex])
+        except redis.RedisError:
+            self._warn()
+            return self.fallback.hit(key, limit, window)
+        if allowed:
+            return True, 0, False
+        return False, max(1, math.ceil(int(wait_ms) / 1000)), bool(first)
+
+    def _warn(self):
+        now = time.monotonic()
+        if now - self._warned_at > 60:      # at most once a minute, not once per request
+            self._warned_at = now
+            current_app.logger.warning('REQ-09: rate-limit store unreachable; '
+                                       "using this replica's own counters")
 
 
 def _logged_in_user_id():
@@ -166,7 +227,13 @@ def init_app(app):
         parse_limit(app.config[name])
     app.config.setdefault('RATE_LIMIT_ENABLED',
                           os.environ.get('RATE_LIMIT_ENABLED', 'true').lower() == 'true')
-    app.extensions['rate_limiter'] = RateLimiter()
+    storage = app.config.get('RATE_LIMIT_STORAGE_URL', os.environ.get('RATE_LIMIT_STORAGE_URL'))
+    if storage:
+        import redis
+        client = redis.Redis.from_url(storage, socket_timeout=0.5, socket_connect_timeout=0.5)
+        app.extensions['rate_limiter'] = RedisRateLimiter(client)
+    else:
+        app.extensions['rate_limiter'] = RateLimiter()
 
     # Behind nginx every request comes from the proxy's address, so all clients
     # would share one limit. TRUSTED_PROXY_COUNT=1 takes the client address from

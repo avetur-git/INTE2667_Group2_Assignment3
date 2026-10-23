@@ -1,6 +1,7 @@
 from app import db
 from app.utils.helpers import utcnow
 from app.utils import constants as C
+from app.security.data_protection import EncryptedText
 
 
 class Voter(db.Model):
@@ -15,10 +16,11 @@ class Voter(db.Model):
     date_of_birth = db.Column(db.Date, nullable=False)
     is_citizen = db.Column(db.Boolean, default=True)
     is_overseas = db.Column(db.Boolean, default=False)   # overseas voters use diplomatic missions
-    address_line = db.Column(db.String(200), nullable=False)
-    suburb = db.Column(db.String(100), nullable=False)
+    # REQ-14: home address is encrypted at rest (AES-256-GCM); code still sees plain text
+    address_line = db.Column(EncryptedText, nullable=False)
+    suburb = db.Column(EncryptedText, nullable=False)
     state = db.Column(db.String(3), nullable=False)
-    postcode = db.Column(db.String(10), nullable=False)
+    postcode = db.Column(EncryptedText, nullable=False)
     division_id = db.Column(db.Integer, db.ForeignKey('divisions.id'), nullable=False)
     enrolment_status = db.Column(db.String(20), nullable=False, default=C.ENROLMENT_PENDING)
     registered_via = db.Column(db.String(20), default='self')   # self | aec_officer
