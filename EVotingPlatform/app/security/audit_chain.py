@@ -17,9 +17,12 @@ import hashlib
 import hmac
 import json
 import os
+import random
+import time
 
 import click
 from flask import current_app
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app import db
@@ -28,7 +31,11 @@ from app.security.chain import GENESIS
 from app.security.hooks import hooks
 from app.utils.helpers import utcnow
 
-_RETRIES = 5
+# REQ-09: under load several requests (and several replicas) race for the next
+# sequence number. Retrying at once makes the losers collide again, so each
+# retry waits a short random time that grows with every attempt.
+_RETRIES = 8
+_BACKOFF_SECONDS = 0.02
 
 
 def _key():
@@ -58,9 +65,21 @@ def compute_hash(prev_hash, payload):
     return hmac.new(_key(), (prev_hash + body).encode(), hashlib.sha256).hexdigest()
 
 
+def _lock_chain_head():
+    """REQ-09: on SQLite, take the database write lock before reading the chain
+    head, so only one writer at a time works out the next sequence number and
+    concurrent writers (threads or replicas) queue instead of colliding.
+    The statement changes no rows, so REQ-05's per-row triggers do not fire.
+    PostgreSQL has no database-wide write lock; there the unique seq and the
+    retries below handle a collision (production would add an advisory lock)."""
+    if db.engine.dialect.name == 'sqlite':
+        db.session.execute(text('UPDATE audit_logs SET seq = seq WHERE 0'))
+
+
 def write_chained_audit_record(entry):
     """Hook write_audit_record: append the entry to the chain."""
     for _attempt in range(_RETRIES):
+        _lock_chain_head()
         last = (AuditLog.query.filter(AuditLog.seq.isnot(None))
                 .order_by(AuditLog.seq.desc()).first())
         row = AuditLog(**entry, created_at=utcnow())
@@ -73,6 +92,7 @@ def write_chained_audit_record(entry):
             return
         except IntegrityError:      # another request took this sequence number: try again
             db.session.rollback()
+            time.sleep(random.uniform(0, _BACKOFF_SECONDS * 2 ** _attempt))  # nosec B311 - jitter, not security
     raise RuntimeError('Could not append to the audit chain')
 
 

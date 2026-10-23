@@ -21,11 +21,14 @@ class User(db.Model):
     voter = db.relationship('Voter', backref='user', uselist=False,
                             foreign_keys='Voter.user_id')
 
-    def __init__(self, username, email, password, role=C.ROLE_VOTER):
+    def __init__(self, username, email, password, role=C.ROLE_VOTER, password_hash=None):
         self.username = username
         self.email = email
         self.role = role
-        self.set_password(password)
+        if password_hash:   # REQ-09: bulk demo data reuses one hash of the same password
+            self.password_hash = password_hash
+        else:
+            self.set_password(password)
 
     def set_password(self, password):
         rounds = int(current_app.config.get('BCRYPT_ROUNDS', 12))

@@ -1,0 +1,20 @@
+{
+  "label": "replicas-2",
+  "terminals": 50,
+  "votes_requested": 300,
+  "votes_recorded": 300,
+  "votes_failed": 0,
+  "duration_s": 116.525029455,
+  "votes_per_second": 2.5745541657713544,
+  "vote_flow_ms": {
+    "avg": 18368.383333333335,
+    "median": 18404.5,
+    "p95": 22705.05,
+    "max": 25327
+  },
+  "cast_ms": {
+    "median": 6825.669281500001,
+    "p95": 9797.747900100001
+  },
+  "http_failures": 0
+}

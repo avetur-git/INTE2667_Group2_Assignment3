@@ -42,6 +42,12 @@ def create_app(test_config=None):
     if test_config:
         app.config.update(test_config)
 
+    # REQ-09: SQLite lets one writer in at a time. Under load, writers queue for
+    # the lock; let them wait up to 30 s (default 5 s) rather than fail with
+    # "database is locked". Production uses PostgreSQL, which has no such lock.
+    if app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite'):
+        app.config.setdefault('SQLALCHEMY_ENGINE_OPTIONS', {'connect_args': {'timeout': 30}})
+
     # Initialize extensions with app
     db.init_app(app)
     jwt.init_app(app)

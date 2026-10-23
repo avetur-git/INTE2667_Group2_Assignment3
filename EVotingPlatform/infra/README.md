@@ -65,6 +65,14 @@ prototype shows the same health-check failover with two replicas behind haproxy.
 Full design: [docs/REQ-08_AVAILABILITY.md](../docs/REQ-08_AVAILABILITY.md); paper
 fallback: [docs/REQ-08_PAPER_FALLBACK.md](../docs/REQ-08_PAPER_FALLBACK.md).
 
+## Scaling in the deployment design (REQ-09)
+
+The API runs as stateless 1 vCPU tasks behind each regional ALB, autoscaled on
+CPU and requests per target, with scheduled scale-out before polls open; rate
+limits in ElastiCache, connections pooled by RDS Proxy. Sized from the load test:
+about 215 vCPU at a 40,000-terminal peak. Documented, not yet in Terraform. Full
+design and load-test results: [docs/REQ-09_SCALING.md](../docs/REQ-09_SCALING.md).
+
 ## Changing infrastructure
 
 1. Branch from `main` and edit the `.tf` files.
