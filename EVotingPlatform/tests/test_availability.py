@@ -14,7 +14,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app import create_app, db
-from app.models import Ballot, VoteRecord, Voter
+from app.models import AuditLog, Ballot, VoteRecord, Voter
+from app.security.audit_chain import find_problems
 from app.security.hooks import hooks
 from app.security.keys import _create_once
 from app.seed import DEMO_PASSWORD, seed_demo, seed_demo_voters
@@ -97,6 +98,10 @@ def test_two_replicas_accept_concurrent_votes(replicas):
         # One unbroken REQ-02 chain: positions 1..n, each linked to the one before
         assert [b.seq for b in ballots] == list(range(1, len(voters) + 1))
         assert hooks.run('verify_ballots', ballots) == []
+        # Both replicas also wrote audit entries at once (CAST_BALLOT): the
+        # REQ-04 audit hash chain must still be one unbroken chain
+        assert AuditLog.query.filter_by(action='CAST_BALLOT').count() == len(voters)
+        assert find_problems() == []
 
 
 def test_a_voter_cannot_vote_once_per_replica(replicas):

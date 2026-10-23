@@ -13,10 +13,13 @@ def register_cli(app):
 
     @app.cli.command('seed-demo-voters')
     @click.option('--count', default=100, show_default=True, help='Number of voters to add.')
-    def seed_demo_voters_command(count):
-        """REQ-08 demo: add enrolled voters demo001..demoNNN (run seed-demo first)."""
-        created = seed_demo_voters(count)
-        click.echo(f'Added {len(created)} voters (demo001..demo{count:03d}, same password as seed-demo)')
+    @click.option('--prefix', default='demo', show_default=True,
+                  help="Username prefix, e.g. 'load' for the REQ-09 load test.")
+    def seed_demo_voters_command(count, prefix):
+        """REQ-08/09: add enrolled voters <prefix>001..<prefix>NNN (run seed-demo first)."""
+        created = seed_demo_voters(count, prefix)
+        click.echo(f'Added {len(created)} voters ({prefix}001..{prefix}{count:03d}, '
+                   'same password as seed-demo)')
 
     @app.cli.command('issue-enrolment-code')
     @click.argument('username')
